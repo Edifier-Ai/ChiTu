@@ -41,6 +41,11 @@ const ProgressBar: React.FC<ProgressBarProps> = ({
           <span className="current-count">
             当前：{progress.current} / {progress.total}
           </span>
+          {progress.filtered !== undefined && progress.filtered > 0 && (
+            <span className="filter-info" title="被过滤的数量">
+              ⚠️ 过滤 {progress.filtered} 条
+            </span>
+          )}
         </div>
       )}
     </div>

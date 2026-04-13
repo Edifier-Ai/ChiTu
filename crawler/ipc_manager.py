@@ -9,13 +9,15 @@ def emit_message(message_type: str, payload: Dict[str, Any]) -> None:
         flush=True,
     )
 
-def output_progress(platform: str, keyword: str, current: int, total: int, data: List[Dict] = None):
+def output_progress(platform: str, keyword: str, current: int, total: int, data: List[Dict] = None, filtered: int = 0, actual: int = 0):
     emit_message("progress", {
         "platform": platform,
         "keyword": keyword,
         "current": current,
         "total": total,
         "data": data or [],
+        "filtered": filtered,
+        "actual": actual,
     })
 
 def output_error(message: str) -> None:

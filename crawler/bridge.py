@@ -114,7 +114,7 @@ def build_browser_cookies(platform_id: str, cookie_str: str) -> List[Dict[str, A
 
 async def scrape_xhs_comments(page: Any, max_comments: int = 5) -> List[Dict[str, str]]:
     comments: List[Dict[str, str]] = []
-    for _ in range(4):
+    for _ in range(3):  # 减少滚动次数从 4 到 3
         try:
             comments = await safe_page_evaluate(
                 page,
@@ -179,14 +179,14 @@ async def scrape_xhs_comments(page: Any, max_comments: int = 5) -> List[Dict[str
             comments = []
         if comments:
             break
-        await page.mouse.wheel(0, 900)
-        await asyncio.sleep(1)
+        await page.mouse.wheel(0, 600)  # 减少滚动距离
+        await asyncio.sleep(0.5)  # 减少等待时间从 1s 到 0.5s
     return comments
 
 
 async def scrape_weibo_comments(page: Any, max_comments: int = 5) -> List[Dict[str, str]]:
     comments: List[Dict[str, str]] = []
-    for _ in range(6):
+    for _ in range(4):  # 减少滚动次数从 6 到 4
         try:
             await safe_page_evaluate(
                 page,
@@ -203,7 +203,7 @@ async def scrape_weibo_comments(page: Any, max_comments: int = 5) -> List[Dict[s
                     window.scrollBy(0, 800);
                 }""",
             )
-            await asyncio.sleep(1)
+            await asyncio.sleep(0.5)  # 减少等待时间从 1s 到 0.5s
             comments = await safe_page_evaluate(
                 page,
                 """(maxCount) => {
@@ -280,8 +280,8 @@ async def scrape_weibo_comments(page: Any, max_comments: int = 5) -> List[Dict[s
             comments = []
         if comments:
             break
-        await page.mouse.wheel(0, 900)
-        await asyncio.sleep(1.2)
+        await page.mouse.wheel(0, 600)  # 减少滚动距离
+        await asyncio.sleep(0.6)  # 减少等待时间从 1.2s 到 0.6s
     return comments
 
 
@@ -481,12 +481,13 @@ async def run_xhs_browser_fallback(keyword: str, count: int, cookie_str: str) ->
 
         search_url = f"https://www.xiaohongshu.com/search_result?keyword={quote(keyword)}&source=web_explore_feed"
         await page.goto(search_url, wait_until="domcontentloaded")
-        await asyncio.sleep(3)
         await wait_for_visible_results(page, ['a[href*="/explore/"]', 'a[href*="/discovery/item/"]'])
 
         note_cards: List[Dict[str, str]] = []
         stagnant_rounds = 0
-        while len(note_cards) < max(count * 2, 20) and stagnant_rounds < 5:
+        # 抓取足够的卡片，确保过滤后仍有 count 条数据
+        target_cards = int(count * 1.5)  # 多抓 50% 以应对过滤
+        while len(note_cards) < max(target_cards, 20) and stagnant_rounds < 5:
             current_cards = await collect_xhs_search_cards(page)
             deduped: List[Dict[str, str]] = []
             seen_urls = set()
@@ -502,47 +503,62 @@ async def run_xhs_browser_fallback(keyword: str, count: int, cookie_str: str) ->
                 stagnant_rounds = 0
             note_cards = deduped
             await page.mouse.wheel(0, 1200)
-            await asyncio.sleep(1.2)
+            await asyncio.sleep(0.5)
 
-        for card in note_cards:
-            if len(results) >= count:
-                break
-            raw_url = card.get("href", "")
-            url = raw_url if raw_url.startswith("http") else urljoin("https://www.xiaohongshu.com", raw_url)
-            note_match = re.search(r"/(?:explore|discovery/item)/([^/?]+)", url)
-            if not note_match:
-                continue
-            note_id = note_match.group(1)
-            detail_page = await context.new_page()
-            try:
-                await detail_page.goto(url, wait_until="domcontentloaded")
-                await asyncio.sleep(2)
-                html = await safe_page_content(detail_page)
-                post = extract_xhs_note_from_html(note_id, html, url, keyword)
-                if not post:
-                    content = card.get("content") or card.get("title") or ""
-                    if not content:
-                        continue
-                    post = {
-                        "id": note_id,
-                        "platform": PLATFORM_NAMES["xiaohongshu"],
-                        "keyword": keyword,
-                        "content": content,
-                        "author": card.get("author") or "未知",
-                        "timestamp": "",
-                        "url": url,
-                        "comments": [],
-                    }
-                else:
-                    post["comments"] = await scrape_xhs_comments(detail_page)
+        # 批量并发打开详情页，提升抓取速度，并实时推送进度
+        detail_semaphore = asyncio.Semaphore(5)  # 最多同时打开 5 个详情页
+        progress_counter = [0]  # 使用列表以便在闭包中修改
+        total_cards = min(len(note_cards), count)
 
-                if not post.get("author") or post.get("author") == "未知":
-                    post["author"] = card.get("author") or post.get("author") or "未知"
-                if not post.get("content"):
-                    post["content"] = card.get("content") or card.get("title") or ""
-                results.append(post)
-            finally:
-                await detail_page.close()
+        async def fetch_detail_card(card: Dict[str, str], index: int) -> Optional[Dict]:
+            async with detail_semaphore:
+                raw_url = card.get("href", "")
+                url = raw_url if raw_url.startswith("http") else urljoin("https://www.xiaohongshu.com", raw_url)
+                note_match = re.search(r"/(?:explore|discovery/item)/([^/?]+)", url)
+                if not note_match:
+                    progress_counter[0] += 1
+                    return None
+                note_id = note_match.group(1)
+                detail_page = await context.new_page()
+                try:
+                    await detail_page.goto(url, wait_until="domcontentloaded")
+                    await asyncio.sleep(0.8)
+                    html = await safe_page_content(detail_page)
+                    post = extract_xhs_note_from_html(note_id, html, url, keyword)
+                    if not post:
+                        content = card.get("content") or card.get("title") or ""
+                        if not content:
+                            progress_counter[0] += 1
+                            return None
+                        post = {
+                            "id": note_id,
+                            "platform": PLATFORM_NAMES["xiaohongshu"],
+                            "keyword": keyword,
+                            "content": content,
+                            "author": card.get("author") or "未知",
+                            "timestamp": "",
+                            "url": url,
+                            "comments": [],
+                        }
+                    else:
+                        post["comments"] = await scrape_xhs_comments(detail_page)
+
+                    if not post.get("author") or post.get("author") == "未知":
+                        post["author"] = card.get("author") or post.get("author") or "未知"
+                    if not post.get("content"):
+                        post["content"] = card.get("content") or card.get("title") or ""
+                    
+                    # 实时推送进度
+                    progress_counter[0] += 1
+                    output_progress(PLATFORM_NAMES["xiaohongshu"], keyword, progress_counter[0], total_cards, [post])
+                    return post
+                finally:
+                    await detail_page.close()
+
+        # 并发抓取详情页
+        detail_tasks = [fetch_detail_card(card, i) for i, card in enumerate(note_cards[:count])]
+        detail_results = await asyncio.gather(*detail_tasks)
+        results = [r for r in detail_results if r is not None]
 
         await context.close()
     return results
@@ -570,7 +586,6 @@ async def run_weibo_browser_fallback(keyword: str, count: int, cookie_str: str) 
         page = await context.new_page()
         search_url = f"https://s.weibo.com/weibo?q={quote(keyword)}"
         await page.goto(search_url, wait_until="domcontentloaded")
-        await asyncio.sleep(3)
         await wait_for_visible_results(page, ['.card-wrap[data-mid]', '.card-wrap'])
 
         cards: List[Dict[str, str]] = []
@@ -607,31 +622,45 @@ async def run_weibo_browser_fallback(keyword: str, count: int, cookie_str: str) 
                 stagnant_rounds = 0
             cards = deduped
             await page.mouse.wheel(0, 1400)
-            await asyncio.sleep(1.2)
+            await asyncio.sleep(0.5)
 
-        for item in cards[:count]:
-            detail_url = f"https://m.weibo.cn/detail/{item['id']}"
-            detail_page = await context.new_page()
-            comments: List[Dict[str, str]] = []
-            try:
-                await detail_page.goto(detail_url, wait_until="domcontentloaded")
-                await asyncio.sleep(2.5)
-                comments = await scrape_weibo_comments(detail_page)
-            except Exception:
-                comments = []
-            finally:
-                await detail_page.close()
+        # 批量并发打开微博详情页，并实时推送进度
+        detail_semaphore = asyncio.Semaphore(5)
+        progress_counter = [0]
+        total_items = min(len(cards), count)
 
-            results.append({
-                "id": str(item["id"]),
-                "platform": PLATFORM_NAMES["weibo"],
-                "keyword": keyword,
-                "content": item.get("content", ""),
-                "author": item.get("author") or "未知",
-                "timestamp": item.get("time", ""),
-                "url": detail_url,
-                "comments": comments,
-            })
+        async def fetch_weibo_detail(item: Dict[str, str]) -> Dict:
+            async with detail_semaphore:
+                detail_url = f"https://m.weibo.cn/detail/{item['id']}"
+                detail_page = await context.new_page()
+                comments: List[Dict[str, str]] = []
+                try:
+                    await detail_page.goto(detail_url, wait_until="domcontentloaded")
+                    await asyncio.sleep(1)
+                    comments = await scrape_weibo_comments(detail_page)
+                except Exception:
+                    comments = []
+                finally:
+                    await detail_page.close()
+
+                result = {
+                    "id": str(item["id"]),
+                    "platform": PLATFORM_NAMES["weibo"],
+                    "keyword": keyword,
+                    "content": item.get("content", ""),
+                    "author": item.get("author") or "未知",
+                    "timestamp": item.get("time", ""),
+                    "url": detail_url,
+                    "comments": comments,
+                }
+                
+                # 实时推送进度
+                progress_counter[0] += 1
+                output_progress(PLATFORM_NAMES["weibo"], keyword, progress_counter[0], total_items, [result])
+                return result
+
+        detail_tasks = [fetch_weibo_detail(item) for item in cards[:count]]
+        results = await asyncio.gather(*detail_tasks)
 
         await context.close()
         await browser.close()
@@ -660,7 +689,6 @@ def run_wrapper_file(wrapper_path: str) -> None:
         setattr(config, k, v)
 
     # Reset argv so MediaCrawler's Typer CLI does not see bridge-only flags.
-    import sys
     sys.argv = [wrapper_path]
 
     from tools.app_runner import run
@@ -901,26 +929,29 @@ def filter_results_by_incremental(results: List[Dict], platform_name: str, keywo
 
     return filtered
 
-def filter_results_by_content(results: List[Dict], include_keywords: List[str], exclude_keywords: List[str]) -> List[Dict]:
+def filter_results_by_content(results: List[Dict], include_keywords: List[str], exclude_keywords: List[str]) -> Tuple[List[Dict], int]:
     include_terms = [term.casefold() for term in normalize_keywords(include_keywords)]
     exclude_terms = [term.casefold() for term in normalize_keywords(exclude_keywords)]
 
     if not include_terms and not exclude_terms:
-        return results
+        return results, 0
 
     filtered: List[Dict] = []
+    filtered_count = 0
     for item in results:
         content = str(item.get("content") or "").casefold()
 
         if include_terms and not all(term in content for term in include_terms):
+            filtered_count += 1
             continue
 
         if exclude_terms and any(term in content for term in exclude_terms):
+            filtered_count += 1
             continue
 
         filtered.append(item)
 
-    return filtered
+    return filtered, filtered_count
 
 
 def make_wrapper_config(mc_platform: str, keyword: str, cookie_str: str,
@@ -930,10 +961,10 @@ def make_wrapper_config(mc_platform: str, keyword: str, cookie_str: str,
     use_cdp = True
     enable_get_comments = mc_platform in ("bili", "dy")
     
-    # 动态并发数，基于 CPU 核心数，最多不超过 4
+    # 提高并发度：基于 CPU 核心数，默认最多 6 个并发任务
     import multiprocessing
     cpu_count = multiprocessing.cpu_count() if multiprocessing.cpu_count() else 2
-    max_concurrency = min(max(1, cpu_count // 2), 4)
+    max_concurrency = min(max(2, cpu_count), 6)
 
     return {
         "_MEDIA_CRAWLER_DIR": MEDIA_CRAWLER_DIR,
@@ -963,7 +994,12 @@ def save_results(results: List[Dict], output_dir: str, platform_name: str, keywo
     if not results or not output_dir:
         return
 
-    os.makedirs(output_dir, exist_ok=True)
+    try:
+        os.makedirs(output_dir, exist_ok=True)
+    except PermissionError:
+        output_error(f"无法创建输出目录：{output_dir}，请检查目录权限。")
+        return
+    
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     file_base = os.path.join(output_dir, f"{platform_name}_{keyword}_{ts}")
     headers = ["id", "platform", "keyword", "author", "timestamp", "url", "content", "comment_count", "comments"]
@@ -984,11 +1020,14 @@ def save_results(results: List[Dict], output_dir: str, platform_name: str, keywo
 
     if export_format == "csv":
         out_file = f"{file_base}.csv"
-        with open(out_file, "w", encoding="utf-8-sig", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=headers)
-            writer.writeheader()
-            for item in results:
-                writer.writerow(to_export_row(item))
+        try:
+            with open(out_file, "w", encoding="utf-8-sig", newline="") as f:
+                writer = csv.DictWriter(f, fieldnames=headers)
+                writer.writeheader()
+                for item in results:
+                    writer.writerow(to_export_row(item))
+        except PermissionError:
+            output_error(f"无法写入文件：{out_file}，请检查目录权限。")
         return
 
     if export_format == "excel":
@@ -997,9 +1036,12 @@ def save_results(results: List[Dict], output_dir: str, platform_name: str, keywo
             from openpyxl import Workbook
         except Exception:
             out_file = f"{file_base}.jsonl"
-            with open(out_file, "w", encoding="utf-8") as f:
-                for item in results:
-                    f.write(json.dumps(item, ensure_ascii=False) + "\n")
+            try:
+                with open(out_file, "w", encoding="utf-8") as f:
+                    for item in results:
+                        f.write(json.dumps(item, ensure_ascii=False) + "\n")
+            except PermissionError:
+                output_error(f"无法写入文件：{out_file}，请检查目录权限。")
             return
 
         wb = Workbook()
@@ -1009,13 +1051,19 @@ def save_results(results: List[Dict], output_dir: str, platform_name: str, keywo
         for item in results:
             row = to_export_row(item)
             ws.append([row.get(key, "") for key in headers])
-        wb.save(out_file)
+        try:
+            wb.save(out_file)
+        except PermissionError:
+            output_error(f"无法写入文件：{out_file}，请检查目录权限。")
         return
 
     out_file = f"{file_base}.jsonl"
-    with open(out_file, "w", encoding="utf-8") as f:
-        for item in results:
-            f.write(json.dumps(item, ensure_ascii=False) + "\n")
+    try:
+        with open(out_file, "w", encoding="utf-8") as f:
+            for item in results:
+                f.write(json.dumps(item, ensure_ascii=False) + "\n")
+    except PermissionError:
+        output_error(f"无法写入文件：{out_file}，请检查目录权限。")
 
 
 async def crawl_one(platform_id: str, mc_platform: str, keyword: str,
@@ -1036,7 +1084,7 @@ async def crawl_one(platform_id: str, mc_platform: str, keyword: str,
 
         if platform_id == "xiaohongshu":
             fallback_results = await run_xhs_browser_fallback(keyword, count, cookie_str)
-            fallback_results = filter_results_by_content(fallback_results, include_keywords, exclude_keywords)
+            fallback_results, xhs_filtered = filter_results_by_content(fallback_results, include_keywords, exclude_keywords)
             fallback_results = filter_results_by_incremental(fallback_results, platform_name, keyword, is_incremental)
 
             if not fallback_results:
@@ -1045,15 +1093,17 @@ async def crawl_one(platform_id: str, mc_platform: str, keyword: str,
                 )
                 return
 
-            for i, item in enumerate(fallback_results):
-                output_progress(platform_name, keyword, i + 1, len(fallback_results), [item])
+            # 严格控制返回数量，确保不超过预设 count
+            if len(fallback_results) > count:
+                fallback_results = fallback_results[:count]
 
+            # 进度已在抓取过程中实时推送，这里只保存结果
             save_results(fallback_results, output_dir, platform_name, keyword, export_format)
             return
 
         if platform_id == "weibo":
             fallback_results = await run_weibo_browser_fallback(keyword, count, cookie_str)
-            fallback_results = filter_results_by_content(fallback_results, include_keywords, exclude_keywords)
+            fallback_results, weibo_filtered = filter_results_by_content(fallback_results, include_keywords, exclude_keywords)
             fallback_results = filter_results_by_incremental(fallback_results, platform_name, keyword, is_incremental)
 
             if not fallback_results:
@@ -1062,9 +1112,11 @@ async def crawl_one(platform_id: str, mc_platform: str, keyword: str,
                 )
                 return
 
-            for i, item in enumerate(fallback_results):
-                output_progress(platform_name, keyword, i + 1, len(fallback_results), [item])
+            # 严格控制返回数量
+            if len(fallback_results) > count:
+                fallback_results = fallback_results[:count]
 
+            # 进度已在抓取过程中实时推送，这里只保存结果
             save_results(fallback_results, output_dir, platform_name, keyword, export_format)
             return
 
@@ -1088,6 +1140,42 @@ async def crawl_one(platform_id: str, mc_platform: str, keyword: str,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
+            # 实时读取子进程输出，同时定期检查临时目录中的 JSONL 文件以推送进度
+            async def read_stream(stream, stream_name):
+                if not stream:
+                    return
+                while True:
+                    line = await stream.readline()
+                    if not line:
+                        break
+                    # 可以在这里解析 MediaCrawler 的日志来更新进度
+                    pass
+
+            # 启动后台任务定期检查临时目录
+            async def poll_progress():
+                """定期检查临时目录中的 JSONL 文件，实时推送进度"""
+                seen_ids = set()
+                poll_interval = 2  # 每 2 秒检查一次
+                while proc.returncode is None:
+                    await asyncio.sleep(poll_interval)
+                    try:
+                        # 读取当前已有的 JSONL 文件
+                        current_results = collect_results(tmp_data_dir, platform_name, keyword)
+                        new_items = []
+                        for item in current_results:
+                            item_key = f"{item['platform']}-{item['id']}"
+                            if item_key not in seen_ids:
+                                seen_ids.add(item_key)
+                                new_items.append(item)
+                        
+                        if new_items:
+                            output_progress(platform_name, keyword, len(seen_ids), count, new_items)
+                    except Exception:
+                        pass  # 忽略轮询期间的错误
+
+            # 启动后台进度轮询
+            poll_task = asyncio.create_task(poll_progress())
+
             try:
                 stdout_bytes, stderr_bytes = await asyncio.wait_for(
                     proc.communicate(), timeout=600
@@ -1095,7 +1183,15 @@ async def crawl_one(platform_id: str, mc_platform: str, keyword: str,
             except asyncio.TimeoutError:
                 proc.kill()
                 output_error(f"{platform_name}采集超时")
+                poll_task.cancel()
                 return
+            
+            # 等待轮询任务完成
+            poll_task.cancel()
+            try:
+                await poll_task
+            except asyncio.CancelledError:
+                pass
         finally:
             os.unlink(wrapper_file.name)
 
@@ -1110,9 +1206,11 @@ async def crawl_one(platform_id: str, mc_platform: str, keyword: str,
                 pass
             elif should_try_browser_fallback:
                 fallback_results = await run_browser_fallback(platform_id, keyword, count, cookie_str)
-                fallback_results = filter_results_by_content(fallback_results, include_keywords, exclude_keywords)
+                fallback_results, _ = filter_results_by_content(fallback_results, include_keywords, exclude_keywords)
                 fallback_results = filter_results_by_incremental(fallback_results, platform_name, keyword, is_incremental)
                 if fallback_results:
+                    if len(fallback_results) > count:
+                        fallback_results = fallback_results[:count]
                     for i, item in enumerate(fallback_results):
                         output_progress(platform_name, keyword, i + 1, len(fallback_results), [item])
                     save_results(fallback_results, output_dir, platform_name, keyword, export_format)
@@ -1135,9 +1233,11 @@ async def crawl_one(platform_id: str, mc_platform: str, keyword: str,
                 pass # Ignore expected timeout when waiting for user action
             elif should_try_browser_fallback:
                 fallback_results = await run_browser_fallback(platform_id, keyword, count, cookie_str)
-                fallback_results = filter_results_by_content(fallback_results, include_keywords, exclude_keywords)
+                fallback_results, _ = filter_results_by_content(fallback_results, include_keywords, exclude_keywords)
                 fallback_results = filter_results_by_incremental(fallback_results, platform_name, keyword, is_incremental)
                 if fallback_results:
+                    if len(fallback_results) > count:
+                        fallback_results = fallback_results[:count]
                     for i, item in enumerate(fallback_results):
                         output_progress(platform_name, keyword, i + 1, len(fallback_results), [item])
                     save_results(fallback_results, output_dir, platform_name, keyword, export_format)
@@ -1149,8 +1249,12 @@ async def crawl_one(platform_id: str, mc_platform: str, keyword: str,
 
         # 读取 JSONL 输出
         raw_results = collect_results(tmp_data_dir, platform_name, keyword)
-        results = filter_results_by_content(raw_results, include_keywords, exclude_keywords)
+        results, content_filtered_count = filter_results_by_content(raw_results, include_keywords, exclude_keywords)
         results = filter_results_by_incremental(results, platform_name, keyword, is_incremental)
+
+        # 严格控制返回数量
+        if len(results) > count:
+            results = results[:count]
 
         if not results:
             if raw_results:
@@ -1161,8 +1265,10 @@ async def crawl_one(platform_id: str, mc_platform: str, keyword: str,
 
             if should_try_browser_fallback:
                 fallback_results = await run_browser_fallback(platform_id, keyword, count, cookie_str)
-                fallback_results = filter_results_by_content(fallback_results, include_keywords, exclude_keywords)
+                fallback_results, _ = filter_results_by_content(fallback_results, include_keywords, exclude_keywords)
                 if fallback_results:
+                    if len(fallback_results) > count:
+                        fallback_results = fallback_results[:count]
                     for i, item in enumerate(fallback_results):
                         output_progress(platform_name, keyword, i + 1, len(fallback_results), [item])
                     save_results(fallback_results, output_dir, platform_name, keyword, export_format)
@@ -1181,9 +1287,12 @@ async def crawl_one(platform_id: str, mc_platform: str, keyword: str,
                 )
             return
 
-        # 推送给前端
-        for i, item in enumerate(results):
-            output_progress(platform_name, keyword, i + 1, len(results), [item])
+        # 分批推送进度，提升实时响应体验
+        chunk_size = 10  # 每 10 条推送一次
+        for i in range(0, len(results), chunk_size):
+            chunk = results[i:i + chunk_size]
+            current = min(i + chunk_size, len(results))
+            output_progress(platform_name, keyword, current, len(results), chunk, content_filtered_count, len(results))
 
         save_results(results, output_dir, platform_name, keyword, export_format)
 
@@ -1233,8 +1342,8 @@ async def main():
             )
 
     if tasks:
-        # 使用 Semaphore 控制并发度，避免同时开启过多浏览器实例导致系统卡顿
-        sem = asyncio.Semaphore(2)
+        # 使用 Semaphore 控制并发度，提高默认值到 4
+        sem = asyncio.Semaphore(4)
 
         async def bound_task(t):
             async with sem:

@@ -26,6 +26,8 @@ export interface CrawlerProgress {
   current: number;
   total: number;
   data: CrawledItem[];
+  filtered?: number;  // 被过滤掉的数量
+  actual?: number;    // 实际有效数量
 }
 
 export interface EnvStatus {

@@ -21,12 +21,11 @@ export function useCrawlerController() {
   const indexByKeyRef = useRef<Map<string, number>>(new Map());
   const errorRef = useRef<string | null>(null);
 
-  // Use throttle to prevent React state updates from blocking the main thread during high-frequency IPC
-  const throttledUpdateUI = useCallback(
-    throttle((newProgress: CrawlerProgress | null, newData: CrawledItem[]) => {
-      if (newProgress) setProgress(newProgress);
-      setCrawledData([...newData]); // Update state with a new array reference
-    }, 200),
+  // 分离进度和数据更新：进度实时更新（无节流），数据节流更新
+  const throttledDataUpdate = useCallback(
+    throttle((newData: CrawledItem[]) => {
+      setCrawledData([...newData]);
+    }, 50), // 降低到 50ms 提升响应速度
     []
   );
 
@@ -40,6 +39,10 @@ export function useCrawlerController() {
 
   useEffect(() => {
     const unsubProgress = window.electronAPI.onCrawlerProgress((data) => {
+      // 进度实时更新（无节流）
+      setProgress(data);
+      
+      // 数据节流更新
       let changed = false;
       if (data.data && data.data.length > 0) {
         const merged = crawledDataRef.current;
@@ -64,20 +67,22 @@ export function useCrawlerController() {
         }
       }
       
-      // Update UI using throttle
-      throttledUpdateUI(data, changed ? crawledDataRef.current : crawledDataRef.current);
+      // 使用节流更新数据
+      if (changed) {
+        throttledDataUpdate(crawledDataRef.current);
+      }
     });
 
     const unsubError = window.electronAPI.onCrawlerError((message: string) => {
       setError(message);
       setIsCrawling(false);
-      throttledUpdateUI.flush();
+      throttledDataUpdate.flush();
     });
 
     const unsubComplete = window.electronAPI.onCrawlerComplete(() => {
       setIsCrawling(false);
       setProgress(null);
-      throttledUpdateUI.flush(); // Ensure any pending updates are committed
+      throttledDataUpdate.flush(); // Ensure any pending updates are committed
       if (crawledDataRef.current.length === 0 && !errorRef.current) {
         setError('本次采集已结束，但没有返回任何数据。请检查 Cookie、关键词筛选条件，或稍后重试。');
       }
@@ -87,9 +92,9 @@ export function useCrawlerController() {
       unsubProgress();
       unsubError();
       unsubComplete();
-      throttledUpdateUI.cancel();
+      throttledDataUpdate.cancel();
     };
-  }, [throttledUpdateUI]);
+  }, [throttledDataUpdate]);
 
   const startCrawler = async ({ envReady, missingCookiePlatforms, ...config }: StartOptions) => {
     if (!envReady) {
