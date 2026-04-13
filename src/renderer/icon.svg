@@ -1,0 +1,219 @@
+
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <radialGradient id="bgGrad" cx="50%" cy="45%" r="70%">
+      <stop offset="0%" stop-color="#ffeef1"/>
+      <stop offset="100%" stop-color="#ffd7df"/>
+    </radialGradient>
+    <radialGradient id="bgGlow" cx="48%" cy="82%" r="38%">
+      <stop offset="0%" stop-color="#f6b3c2" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="#f6b3c2" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="bodyGrad" x1="18%" y1="8%" x2="84%" y2="90%">
+      <stop offset="0%" stop-color="#df6346"/>
+      <stop offset="100%" stop-color="#a72b25"/>
+    </linearGradient>
+    <linearGradient id="muzzleGrad" x1="20%" y1="10%" x2="80%" y2="100%">
+      <stop offset="0%" stop-color="#fff8f2"/>
+      <stop offset="100%" stop-color="#ffd9cc"/>
+    </linearGradient>
+    <linearGradient id="earGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#eb6f52"/>
+      <stop offset="100%" stop-color="#9f3027"/>
+    </linearGradient>
+    <linearGradient id="innerEarGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffd9d6"/>
+      <stop offset="100%" stop-color="#fff0ea"/>
+    </linearGradient>
+    <linearGradient id="hoofGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#6f4a45"/>
+      <stop offset="100%" stop-color="#352625"/>
+    </linearGradient>
+    <linearGradient id="maneGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ef7052"/>
+      <stop offset="35%" stop-color="#cb2d22"/>
+      <stop offset="100%" stop-color="#8e1716"/>
+    </linearGradient>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="24" stdDeviation="26" flood-color="#b64552" flood-opacity="0.18"/>
+    </filter>
+    <filter id="bodyShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="18" stdDeviation="24" flood-color="#7d231d" flood-opacity="0.18"/>
+    </filter>
+    <filter id="furBlur" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="2.6"/>
+    </filter>
+  </defs>
+
+  <rect x="0" y="0" width="1024" height="1024" rx="140" fill="url(#bgGrad)"/>
+  <rect x="0" y="0" width="1024" height="1024" rx="140" fill="url(#bgGlow)"/>
+  <ellipse cx="518" cy="856" rx="286" ry="64" fill="#e998ab" opacity="0.28" filter="url(#softShadow)"/>
+
+  <g filter="url(#bodyShadow)">
+    <path d="M630 548
+             C776 545 882 620 882 762
+             C882 870 807 930 690 930
+             L422 930
+             C332 930 277 886 277 809
+             C277 708 355 625 498 585
+             C534 575 583 548 630 548Z"
+          fill="url(#bodyGrad)"/>
+
+    <ellipse cx="332" cy="901" rx="44" ry="26" fill="url(#hoofGrad)"/>
+    <ellipse cx="467" cy="901" rx="44" ry="26" fill="url(#hoofGrad)"/>
+    <ellipse cx="694" cy="901" rx="48" ry="28" fill="url(#hoofGrad)"/>
+    <ellipse cx="824" cy="901" rx="44" ry="26" fill="url(#hoofGrad)"/>
+
+    <path d="M294 760
+             C286 744 282 727 282 705
+             C282 593 360 499 477 455
+             C551 428 649 425 717 451
+             C787 478 837 548 837 646
+             C837 731 788 787 703 813
+             C651 830 593 832 529 826
+             C417 815 332 802 294 760Z"
+          fill="url(#bodyGrad)"/>
+
+    <path d="M313 754
+             C291 710 290 658 309 617
+             C337 556 394 515 462 492
+             C520 472 601 468 668 487
+             C748 511 803 574 804 654
+             C805 720 773 764 708 790
+             C669 805 616 810 560 806
+             C454 799 358 792 313 754Z"
+          fill="url(#bodyGrad)"/>
+
+    <path d="M255 342
+             C255 235 337 157 441 152
+             C549 147 636 212 639 323
+             C642 397 600 449 541 475
+             C500 493 460 494 416 492
+             C323 487 255 432 255 342Z"
+          fill="url(#bodyGrad)"/>
+
+    <path d="M326 128
+             C294 98 295 49 325 31
+             C357 12 405 26 431 63
+             C448 87 455 114 451 145
+             C445 182 420 198 391 188
+             C365 180 348 159 326 128Z"
+          fill="url(#earGrad)"/>
+    <path d="M344 114
+             C325 88 325 56 344 45
+             C363 34 394 46 413 74
+             C425 92 430 113 427 134
+             C424 153 410 161 394 155
+             C377 149 364 140 344 114Z"
+          fill="url(#innerEarGrad)"/>
+
+    <path d="M590 133
+             C620 101 663 95 688 117
+             C713 139 713 184 691 220
+             C669 257 636 279 606 269
+             C576 260 563 224 573 182
+             C578 160 585 149 590 133Z"
+          fill="url(#earGrad)"/>
+    <path d="M611 135
+             C629 114 654 107 669 120
+             C684 132 683 163 668 189
+             C654 214 636 226 620 222
+             C603 217 598 193 603 167
+             C605 153 608 145 611 135Z"
+          fill="url(#innerEarGrad)"/>
+
+    <path d="M316 236
+             C379 162 501 151 580 212
+             C656 270 669 406 581 467
+             C514 514 403 516 334 462
+             C264 407 255 306 316 236Z"
+          fill="url(#bodyGrad)"/>
+
+    <path d="M342 545
+             C361 520 394 507 446 505
+             C509 503 569 522 601 561
+             C632 599 632 651 602 688
+             C571 726 515 741 439 736
+             C365 732 314 707 294 663
+             C278 628 292 581 342 545Z"
+          fill="url(#muzzleGrad)"/>
+
+    <ellipse cx="358" cy="508" rx="53" ry="73" fill="#ffffff" opacity="0.95"/>
+    <ellipse cx="358" cy="505" rx="46" ry="66" fill="#3d1716"/>
+    <ellipse cx="378" cy="473" rx="12" ry="14" fill="#ffffff"/>
+    <ellipse cx="370" cy="482" rx="7" ry="8" fill="#fff5ef" opacity="0.8"/>
+
+    <ellipse cx="600" cy="500" rx="53" ry="73" fill="#ffffff" opacity="0.95"/>
+    <ellipse cx="600" cy="497" rx="46" ry="66" fill="#3d1716"/>
+    <ellipse cx="620" cy="465" rx="12" ry="14" fill="#ffffff"/>
+    <ellipse cx="612" cy="474" rx="7" ry="8" fill="#fff5ef" opacity="0.8"/>
+
+    <ellipse cx="404" cy="624" rx="16" ry="24" fill="#e57855"/>
+    <ellipse cx="524" cy="626" rx="16" ry="24" fill="#e57855"/>
+
+    <path d="M365 197
+             C425 142 519 135 579 181
+             C556 176 529 180 505 192
+             C463 176 412 179 365 197Z"
+          fill="#f89e8d" opacity="0.18"/>
+  </g>
+
+  <g filter="url(#bodyShadow)">
+    <path d="M348 257
+             C388 164 449 126 525 142
+             C547 147 565 156 586 170
+             C556 162 533 167 510 193
+             C488 220 476 248 468 290
+             C454 274 430 266 409 270
+             C389 273 369 284 348 257Z"
+          fill="url(#maneGrad)"/>
+
+    <path d="M402 197
+             C462 146 530 133 592 174
+             C545 170 519 184 494 221
+             C476 248 469 278 462 315
+             C454 302 447 287 429 262
+             C421 252 411 235 402 197Z"
+          fill="url(#maneGrad)"/>
+
+    <path d="M464 183
+             C512 151 560 148 611 177
+             C573 179 547 198 528 231
+             C516 252 512 279 510 298
+             C500 286 496 266 489 246
+             C481 220 472 203 464 183Z"
+          fill="url(#maneGrad)"/>
+
+    <path d="M442 203
+             C468 171 501 151 542 150
+             C521 159 500 187 489 212
+             C478 236 474 258 474 273
+             C466 263 460 253 453 240
+             C446 228 443 218 442 203Z"
+          fill="#ff9c84" opacity="0.18"/>
+  </g>
+
+  <g filter="url(#furBlur)" opacity="0.95">
+    <path d="M744 623
+             C809 626 870 667 892 729
+             C917 798 892 860 848 900
+             C835 874 810 860 793 844
+             C756 809 734 759 724 720
+             C715 684 718 652 744 623Z"
+          fill="url(#maneGrad)"/>
+    <path d="M756 641
+             C804 645 853 678 870 726
+             C887 773 869 821 835 857
+             C826 833 808 821 794 808
+             C763 779 746 742 738 710
+             C730 683 733 657 756 641Z"
+          fill="url(#maneGrad)"/>
+    <path d="M770 661
+             C811 669 848 699 858 738
+             C869 776 853 812 824 838
+             C818 818 804 803 791 791
+             C766 768 752 739 747 713
+             C742 693 747 674 770 661Z"
+          fill="#f06f5f"/>
+  </g>
+</svg>

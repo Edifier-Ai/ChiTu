@@ -1,0 +1,4 @@
+# Crawler dependencies
+aiohttp>=3.9.0
+aiohttp-retry>=2.8.0
+asyncio>=3.4.3

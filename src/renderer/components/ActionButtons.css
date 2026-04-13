@@ -1,0 +1,100 @@
+.action-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 14px 18px 18px;
+  background: transparent;
+}
+
+.start-btn,
+.stop-btn,
+.export-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 22px;
+  border: none;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.btn-icon {
+  font-size: 15px;
+}
+
+.start-btn {
+  min-width: 132px;
+  background: linear-gradient(135deg, #07c160 0%, #059669 100%);
+  color: white;
+  box-shadow: 0 10px 20px rgba(7, 193, 96, 0.22);
+}
+
+.start-btn:hover {
+  background: linear-gradient(135deg, #06d66a 0%, #07a87a 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 12px 24px rgba(7, 193, 96, 0.28);
+}
+
+.start-btn:disabled,
+.stop-btn:disabled,
+.export-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.stop-btn {
+  min-width: 132px;
+  background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%);
+  color: white;
+  box-shadow: 0 10px 20px rgba(220, 38, 38, 0.22);
+  animation: pulse-stop 2s infinite;
+}
+
+.stop-btn:hover {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 12px 24px rgba(220, 38, 38, 0.28);
+}
+
+@keyframes pulse-stop {
+  0%, 100% { box-shadow: 0 10px 20px rgba(220, 38, 38, 0.22); }
+  50% { box-shadow: 0 12px 24px rgba(220, 38, 38, 0.32); }
+}
+
+.export-btn {
+  min-width: 120px;
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+}
+
+.export-btn:hover:not(:disabled) {
+  background: var(--surface-hover);
+  border-color: var(--text-tertiary);
+  transform: translateY(-1px);
+}
+
+.export-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+@media (max-width: 720px) {
+  .action-buttons {
+    justify-content: stretch;
+    flex-wrap: wrap;
+  }
+
+  .start-btn,
+  .stop-btn,
+  .export-btn {
+    flex: 1 1 calc(50% - 6px);
+  }
+}

@@ -1,0 +1,17 @@
+node_modules
+dist
+dist_crawler
+.chitu_data
+release
+build
+*.log
+.DS_Store
+crawler/MediaCrawler
+*.pyc
+__pycache__
+.trae/skills
+*.icns
+icon.iconset
+icon/
+icon.png
+generate-icon.js

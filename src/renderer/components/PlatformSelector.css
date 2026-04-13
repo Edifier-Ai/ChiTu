@@ -1,0 +1,100 @@
+.platform-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.platform-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.platform-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 14px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+  overflow: hidden;
+}
+
+.platform-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--platform-color);
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.platform-card:hover:not(.disabled) {
+  border-color: var(--platform-color);
+  transform: translateY(-2px);
+}
+
+.platform-card:hover:not(.disabled)::before {
+  opacity: 1;
+}
+
+.platform-card.selected {
+  border-color: var(--platform-color);
+  background: color-mix(in srgb, var(--surface-raised) 78%, var(--platform-color) 22%);
+}
+
+.platform-card.selected::before {
+  opacity: 1;
+}
+
+.platform-card.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.platform-card.disabled:hover {
+  transform: none;
+  border-color: var(--border-color);
+}
+
+.platform-icon {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+}
+
+.platform-name {
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.check-mark {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 20px;
+  height: 20px;
+  background: var(--platform-color);
+  border-radius: 50%;
+  color: white;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: check-pop 0.3s ease-out;
+}
+
+@keyframes check-pop {
+  0% { transform: scale(0); }
+  50% { transform: scale(1.2); }
+  100% { transform: scale(1); }
+}

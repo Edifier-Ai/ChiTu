@@ -1,0 +1,74 @@
+{
+  "name": "chitu",
+  "version": "0.0.26",
+  "description": "赤兔数据采集系统 beta 版",
+  "main": "dist/main/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "concurrently \"npm run dev:renderer\" \"npm run dev:main\"",
+    "dev:renderer": "vite",
+    "dev:main": "NODE_ENV=development nodemon --watch src/main --ext ts --exec \"sh -c 'tsc --project tsconfig.build.json && electron .'\"",
+    "build": "tsc --project tsconfig.build.json && tsc --project tsconfig.json && vite build",
+    "build:crawler": "node scripts/build-crawler.mjs",
+    "package": "npm run build && npm run build:crawler && electron-builder --mac",
+    "package:all": "npm run build && npm run build:crawler && electron-builder --mac --win --linux"
+  },
+  "keywords": [
+    "crawler",
+    "data-collection",
+    "electron",
+    "react"
+  ],
+  "author": "ChiTu Team",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/react": "^18.2.48",
+    "@types/react-dom": "^18.2.18",
+    "@types/react-virtualized-auto-sizer": "^1.0.4",
+    "@types/react-window": "^1.8.8",
+    "@vitejs/plugin-react": "^4.2.1",
+    "autoprefixer": "^10.4.17",
+    "concurrently": "^8.2.2",
+    "electron": "^28.1.0",
+    "electron-builder": "^24.9.1",
+    "nodemon": "^3.0.3",
+    "postcss": "^8.4.33",
+    "sharp": "^0.34.5",
+    "tailwindcss": "^3.4.1",
+    "typescript": "^5.3.3",
+    "vite": "^5.0.11",
+    "vite-plugin-electron": "^0.28.2"
+  },
+  "dependencies": {
+    "antd": "^5.13.2",
+    "archiver": "^5.3.2",
+    "dayjs": "^1.11.10",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-virtualized-auto-sizer": "^2.0.3",
+    "react-window": "^2.2.7"
+  },
+  "build": {
+    "appId": "com.chitu.app",
+    "productName": "赤兔数据采集系统",
+    "icon": "icon.icns",
+    "mac": {
+      "category": "public.app-category.utilities",
+      "target": "dmg",
+      "icon": "icon.icns"
+    },
+    "files": [
+      "dist/**/*",
+      "dist_crawler/**/*",
+      "icon.icns",
+      "icon.png"
+    ],
+    "asarUnpack": [
+      "dist_crawler/**"
+    ],
+    "directories": {
+      "output": "release"
+    }
+  }
+}
