@@ -38,8 +38,8 @@ const Header: React.FC<HeaderProps> = ({
           <button className="theme-btn" onClick={onToggleTheme} title="切换黑白模式">
             {themeMode === 'dark' ? '☀ 白色模式' : '☾ 深色模式'}
           </button>
-          <button className="cookie-btn" onClick={onOpenCookieSettings} title="配置账号 Cookie">
-            🔑 账号设置
+          <button className="cookie-btn" onClick={onOpenCookieSettings} title="配置账号与AI分析">
+            ⚙️ 设置
           </button>
           <span className={`status-badge ${envStatus?.ready ? 'ready' : 'warning'}`}>{statusText}</span>
         </div>

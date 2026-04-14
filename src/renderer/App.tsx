@@ -10,7 +10,7 @@ import ExportFormatSelector from './components/ExportFormatSelector';
 import ProgressBar from './components/ProgressBar';
 import ContentPreview from './components/ContentPreview';
 import ActionButtons from './components/ActionButtons';
-import CookieSettings from './components/CookieSettings';
+import SettingsModal from './components/SettingsModal';
 import { Dashboard } from './components/Dashboard';
 import { ExportFormat, PlatformId } from '../shared/types';
 import { useEnvStatus } from './hooks/useEnvStatus';
@@ -283,7 +283,7 @@ const App: React.FC = () => {
           canExport={crawledData.length > 0}
           disableStart={Boolean(envStatus && !envStatus.ready)}
         />
-        <CookieSettings
+        <SettingsModal
           visible={showCookieSettings}
           onClose={() => setShowCookieSettings(false)}
           onSaved={refreshEnvStatus}

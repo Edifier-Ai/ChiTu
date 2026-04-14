@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron';
-import { BridgeCompleteMessage, CrawlerConfig, CrawlerProgress, ExportPayload } from '../shared/types';
+import { BridgeCompleteMessage, CrawlerConfig, CrawlerProgress, ExportPayload, AppSettings } from '../shared/types';
 
 contextBridge.exposeInMainWorld('electronAPI', {
   selectOutputDir: () => ipcRenderer.invoke('select-output-dir'),
@@ -25,6 +25,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   saveCookies: (cookies: Record<string, string>) => ipcRenderer.invoke('save-cookies', cookies),
   loadCookies: () => ipcRenderer.invoke('load-cookies'),
+  saveSettings: (settings: Partial<AppSettings>) => ipcRenderer.invoke('save-settings', settings),
+  loadSettings: () => ipcRenderer.invoke('load-settings'),
   openLoginWindow: (platformId: string) => ipcRenderer.invoke('open-login-window', platformId),
   analyzeData: (texts: string[]) => ipcRenderer.invoke('analyze-data', texts),
+  aiAnalyzeData: (prompt: string, texts: string[]) => ipcRenderer.invoke('ai-analyze-data', prompt, texts),
 });

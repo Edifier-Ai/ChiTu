@@ -35,6 +35,29 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, isCrawling }) => {
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
+  const [aiInsight, setAiInsight] = useState<string | null>(null);
+  const [isAiLoading, setIsAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+
+  const handleGenerateAiInsight = async () => {
+    if (data.length === 0) return;
+    setIsAiLoading(true);
+    setAiError(null);
+    try {
+      const texts = data.map(item => item.content).filter(Boolean);
+      const res = await window.electronAPI.aiAnalyzeData('请总结这份社交媒体数据的核心观点、用户主要痛点、情感趋势，并给出简短的商业建议。', texts);
+      if (res.error) {
+        setAiError(res.error);
+      } else {
+        setAiInsight(res.result || 'AI 未返回有效内容');
+      }
+    } catch (err) {
+      setAiError(String(err));
+    } finally {
+      setIsAiLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (data.length === 0 || isCrawling) {
       setAnalysis(null);
@@ -201,6 +224,33 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, isCrawling }) => {
             </div>
           ) : (
             <div className="chart-loading">无足够文本生成词云</div>
+          )}
+        </div>
+      </div>
+
+      {/* AI 深度分析 */}
+      <div className="dashboard-ai-card">
+        <div className="ai-card-header">
+          <h3>🤖 AI 深度分析洞察</h3>
+          <button 
+            className="generate-ai-btn" 
+            onClick={handleGenerateAiInsight} 
+            disabled={isAiLoading || data.length === 0}
+          >
+            {isAiLoading ? 'AI 思考中...' : '生成洞察报告'}
+          </button>
+        </div>
+        <div className="ai-card-content">
+          {aiError ? (
+            <div className="ai-error">{aiError}</div>
+          ) : aiInsight ? (
+            <div className="ai-result">
+              {aiInsight.split('\n').map((line, i) => <p key={i}>{line}</p>)}
+            </div>
+          ) : (
+            <div className="ai-placeholder">
+              点击上方按钮，AI 将根据当前的采集数据，提取典型用户画像、核心痛点并给出商业建议。需在“设置”中配置 OpenAI 兼容的 API 信息。
+            </div>
           )}
         </div>
       </div>

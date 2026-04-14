@@ -125,6 +125,16 @@ export type BridgeMessage =
   | BridgeCompleteMessage
   | BridgeLogMessage;
 
+export interface AiConfig {
+  baseUrl: string;
+  apiKey: string;
+  model: string;
+}
+
+export interface AppSettings {
+  ai?: AiConfig;
+}
+
 export interface ElectronAPI {
   selectOutputDir: () => Promise<SelectDirectoryResult>;
   getAppVersion: () => Promise<string>;
@@ -137,6 +147,9 @@ export interface ElectronAPI {
   onCrawlerComplete: (callback: (result: BridgeCompleteMessage['payload']) => void) => () => void;
   saveCookies: (cookies: Record<string, string>) => Promise<SaveCookiesResult>;
   loadCookies: () => Promise<Record<string, string>>;
+  saveSettings: (settings: Partial<AppSettings>) => Promise<{ success: boolean; error?: string }>;
+  loadSettings: () => Promise<AppSettings>;
   openLoginWindow: (platformId: string) => Promise<string | null>;
   analyzeData: (texts: string[]) => Promise<any>;
+  aiAnalyzeData: (prompt: string, texts: string[]) => Promise<{ result?: string; error?: string }>;
 }

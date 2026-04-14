@@ -1,7 +1,8 @@
 import { app, BrowserWindow, dialog, ipcMain } from 'electron';
 import path from 'path';
-import { BridgeMessage, CrawlerConfig, ExportPayload } from '../shared/types';
+import { BridgeMessage, CrawlerConfig, ExportPayload, AppSettings } from '../shared/types';
 import { saveCookies, loadCookies } from './services/cookies';
+import { saveSettings, loadSettings } from './services/settings';
 import { spawn } from 'child_process';
 import { checkCrawlerEnv, getCrawlerPaths, resolvePythonExecutable } from './services/crawlerEnv';
 import { CrawlerRuntime } from './services/crawlerRuntime';
@@ -152,6 +153,62 @@ app.whenReady().then(() => {
         }
       }
     });
+  });
+
+  ipcMain.handle('save-settings', async (_, settings: Partial<AppSettings>) => {
+    return saveSettings(settings);
+  });
+
+  ipcMain.handle('load-settings', async () => {
+    return loadSettings();
+  });
+
+  ipcMain.handle('ai-analyze-data', async (_, prompt: string, texts: string[]) => {
+    try {
+      const settings = loadSettings();
+      const aiConfig = settings.ai;
+      
+      if (!aiConfig?.baseUrl || !aiConfig?.apiKey || !aiConfig?.model) {
+        return { error: '未配置 AI 模型信息，请先前往设置进行配置' };
+      }
+
+      // Prepare the payload for OpenAI-compatible endpoint
+      // Limit texts to avoid hitting token limits immediately, let's take up to ~500 items max and truncate
+      const sampleTexts = texts.slice(0, 300).map(t => t.substring(0, 500));
+      const contentStr = sampleTexts.map((t, i) => `[${i+1}] ${t}`).join('\n');
+
+      const messages = [
+        { role: 'system', content: '你是一个资深的数据分析专家，负责对用户采集的社交媒体数据进行深度挖掘和洞察分析。请基于用户提供的数据内容，给出结构化、清晰的结论。' },
+        { role: 'user', content: `${prompt}\n\n以下是部分采集到的数据内容片段：\n${contentStr}` }
+      ];
+
+      // Assuming OpenAI compatible API
+      const url = new URL('/v1/chat/completions', aiConfig.baseUrl).toString();
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${aiConfig.apiKey}`
+        },
+        body: JSON.stringify({
+          model: aiConfig.model,
+          messages,
+          temperature: 0.7,
+        })
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        return { error: `AI 请求失败: ${response.status} ${response.statusText}\n${errText}` };
+      }
+
+      const json = await response.json() as any;
+      const result = json.choices?.[0]?.message?.content;
+      return { result };
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : String(error) };
+    }
   });
 
   createWindow();
