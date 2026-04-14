@@ -1140,58 +1140,66 @@ async def crawl_one(platform_id: str, mc_platform: str, keyword: str,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
-            # 实时读取子进程输出，同时定期检查临时目录中的 JSONL 文件以推送进度
-            async def read_stream(stream, stream_name):
-                if not stream:
-                    return
-                while True:
-                    line = await stream.readline()
-                    if not line:
-                        break
-                    # 可以在这里解析 MediaCrawler 的日志来更新进度
-                    pass
-
-            # 启动后台任务定期检查临时目录
-            async def poll_progress():
-                """定期检查临时目录中的 JSONL 文件，实时推送进度"""
-                seen_ids = set()
-                poll_interval = 2  # 每 2 秒检查一次
-                while proc.returncode is None:
-                    await asyncio.sleep(poll_interval)
-                    try:
-                        # 读取当前已有的 JSONL 文件
-                        current_results = collect_results(tmp_data_dir, platform_name, keyword)
-                        new_items = []
-                        for item in current_results:
-                            item_key = f"{item['platform']}-{item['id']}"
-                            if item_key not in seen_ids:
-                                seen_ids.add(item_key)
-                                new_items.append(item)
-                        
-                        if new_items:
-                            output_progress(platform_name, keyword, len(seen_ids), count, new_items)
-                    except Exception:
-                        pass  # 忽略轮询期间的错误
-
-            # 启动后台进度轮询
-            poll_task = asyncio.create_task(poll_progress())
-
-            try:
-                stdout_bytes, stderr_bytes = await asyncio.wait_for(
-                    proc.communicate(), timeout=600
-                )
-            except asyncio.TimeoutError:
-                proc.kill()
-                output_error(f"{platform_name}采集超时")
-                poll_task.cancel()
-                return
             
-            # 等待轮询任务完成
-            poll_task.cancel()
             try:
-                await poll_task
-            except asyncio.CancelledError:
-                pass
+                # 实时读取子进程输出，同时定期检查临时目录中的 JSONL 文件以推送进度
+                async def read_stream(stream, stream_name):
+                    if not stream:
+                        return
+                    while True:
+                        line = await stream.readline()
+                        if not line:
+                            break
+                        # 可以在这里解析 MediaCrawler 的日志来更新进度
+                        pass
+
+                # 启动后台任务定期检查临时目录
+                async def poll_progress():
+                    """定期检查临时目录中的 JSONL 文件，实时推送进度"""
+                    seen_ids = set()
+                    poll_interval = 2  # 每 2 秒检查一次
+                    while proc.returncode is None:
+                        await asyncio.sleep(poll_interval)
+                        try:
+                            # 读取当前已有的 JSONL 文件
+                            current_results = collect_results(tmp_data_dir, platform_name, keyword)
+                            new_items = []
+                            for item in current_results:
+                                item_key = f"{item['platform']}-{item['id']}"
+                                if item_key not in seen_ids:
+                                    seen_ids.add(item_key)
+                                    new_items.append(item)
+                            
+                            if new_items:
+                                output_progress(platform_name, keyword, len(seen_ids), count, new_items)
+                        except Exception:
+                            pass  # 忽略轮询期间的错误
+
+                # 启动后台进度轮询
+                poll_task = asyncio.create_task(poll_progress())
+
+                try:
+                    stdout_bytes, stderr_bytes = await asyncio.wait_for(
+                        proc.communicate(), timeout=600
+                    )
+                except asyncio.TimeoutError:
+                    proc.kill()
+                    output_error(f"{platform_name}采集超时")
+                    poll_task.cancel()
+                    return
+                
+                # 等待轮询任务完成
+                poll_task.cancel()
+                try:
+                    await poll_task
+                except asyncio.CancelledError:
+                    pass
+            finally:
+                if proc.returncode is None:
+                    try:
+                        proc.kill()
+                    except Exception:
+                        pass
         finally:
             os.unlink(wrapper_file.name)
 

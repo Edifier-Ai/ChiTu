@@ -58,6 +58,7 @@ export interface CrawlerConfig {
   count: number;
   outputDir: string;
   exportFormat: ExportFormat;
+  cookies?: Record<string, string>;
 }
 
 export interface ExportPayload {
@@ -137,4 +138,5 @@ export interface ElectronAPI {
   saveCookies: (cookies: Record<string, string>) => Promise<SaveCookiesResult>;
   loadCookies: () => Promise<Record<string, string>>;
   openLoginWindow: (platformId: string) => Promise<string | null>;
+  analyzeData: (texts: string[]) => Promise<any>;
 }

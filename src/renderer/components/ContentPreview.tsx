@@ -182,7 +182,7 @@ const ContentPreview: React.FC<ContentPreviewProps> = ({ data }) => {
             <List
               className="preview-list-virtual"
               style={{ height: height || 0, width: width || 0 }}
-              rowComponent={PreviewRow}
+              rowComponent={PreviewRow as any}
               rowCount={data.length}
               rowHeight={rowHeight}
               rowProps={rowProps}

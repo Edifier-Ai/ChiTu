@@ -1,6 +1,47 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { CrawledItem, CrawlerConfig, CrawlerProgress, ExportFormat } from '../../shared/types';
-import throttle from 'lodash/throttle';
+
+// Native throttle implementation — replaces lodash/throttle phantom dependency
+function throttle<T extends (...args: unknown[]) => void>(fn: T, delay: number): T & { flush: () => void; cancel: () => void } {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let lastArgs: unknown[] | null = null;
+
+  const invoke = () => {
+    if (lastArgs !== null) {
+      fn(...lastArgs);
+      lastArgs = null;
+    }
+  };
+
+  const throttled = ((...args: unknown[]) => {
+    lastArgs = args;
+    if (timer === null) {
+      invoke();
+      timer = setTimeout(() => {
+        timer = null;
+        invoke();
+      }, delay);
+    }
+  }) as T & { flush: () => void; cancel: () => void };
+
+  throttled.flush = () => {
+    if (timer !== null) {
+      clearTimeout(timer);
+      timer = null;
+    }
+    invoke();
+  };
+
+  throttled.cancel = () => {
+    if (timer !== null) {
+      clearTimeout(timer);
+      timer = null;
+    }
+    lastArgs = null;
+  };
+
+  return throttled;
+}
 
 interface StartOptions extends CrawlerConfig {
   envReady: boolean;
@@ -21,11 +62,12 @@ export function useCrawlerController() {
   const indexByKeyRef = useRef<Map<string, number>>(new Map());
   const errorRef = useRef<string | null>(null);
 
-  // 分离进度和数据更新：进度实时更新（无节流），数据节流更新
+  // Throttled data update — uses immutable copy to avoid stale closure issues
   const throttledDataUpdate = useCallback(
-    throttle((newData: CrawledItem[]) => {
-      setCrawledData([...newData]);
-    }, 50), // 降低到 50ms 提升响应速度
+    throttle(() => {
+      // Create a fresh copy from the ref at the time of actual execution
+      setCrawledData([...crawledDataRef.current]);
+    }, 50),
     []
   );
 
@@ -42,11 +84,14 @@ export function useCrawlerController() {
       // 进度实时更新（无节流）
       setProgress(data);
       
-      // 数据节流更新
+      // 数据更新：使用新数组引用避免突变问题
       let changed = false;
       if (data.data && data.data.length > 0) {
-        const merged = crawledDataRef.current;
+        const currentData = crawledDataRef.current;
         const indexByKey = indexByKeyRef.current;
+        // Create a new array only when there are changes
+        const merged = [...currentData];
+        
         for (const item of data.data) {
           const key = `${item.platform}-${item.id}-${item.timestamp}`;
           const existingIndex = indexByKey.get(key);
@@ -65,11 +110,15 @@ export function useCrawlerController() {
             }
           }
         }
+
+        if (changed) {
+          crawledDataRef.current = merged;
+        }
       }
       
       // 使用节流更新数据
       if (changed) {
-        throttledDataUpdate(crawledDataRef.current);
+        throttledDataUpdate();
       }
     });
 
@@ -79,11 +128,14 @@ export function useCrawlerController() {
       throttledDataUpdate.flush();
     });
 
-    const unsubComplete = window.electronAPI.onCrawlerComplete(() => {
+    const unsubComplete = window.electronAPI.onCrawlerComplete((result) => {
       setIsCrawling(false);
       setProgress(null);
       throttledDataUpdate.flush(); // Ensure any pending updates are committed
-      if (crawledDataRef.current.length === 0 && !errorRef.current) {
+      
+      // result.code is null if the process was killed by a signal (e.g. stopped manually)
+      const wasStoppedManually = result.code === null;
+      if (!wasStoppedManually && crawledDataRef.current.length === 0 && !errorRef.current) {
         setError('本次采集已结束，但没有返回任何数据。请检查 Cookie、关键词筛选条件，或稍后重试。');
       }
     });
@@ -115,7 +167,7 @@ export function useCrawlerController() {
       return false;
     }
     if (missingCookiePlatforms.length > 0) {
-      setError(`以下平台缺少 Cookie：${missingCookiePlatforms.join('、')}。请先在右上角“账号设置”中保存登录态。`);
+      setError(`以下平台缺少 Cookie：${missingCookiePlatforms.join('、')}。请先在右上角"账号设置"中保存登录态。`);
       return false;
     }
 

@@ -26,4 +26,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveCookies: (cookies: Record<string, string>) => ipcRenderer.invoke('save-cookies', cookies),
   loadCookies: () => ipcRenderer.invoke('load-cookies'),
   openLoginWindow: (platformId: string) => ipcRenderer.invoke('open-login-window', platformId),
+  analyzeData: (texts: string[]) => ipcRenderer.invoke('analyze-data', texts),
 });

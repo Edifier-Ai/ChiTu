@@ -4,6 +4,7 @@ import readline from 'readline';
 import { ChildProcess, spawn } from 'child_process';
 import { BridgeCompleteMessage, BridgeMessage, CrawlerConfig } from '../../shared/types';
 import { getCrawlerPaths, resolvePythonExecutable } from './crawlerEnv';
+import { loadCookies } from './cookies';
 
 type MessageHandler = (message: BridgeMessage) => void;
 
@@ -39,13 +40,8 @@ function parseBridgeLine(line: string, stream: 'stdout' | 'stderr'): BridgeMessa
       };
     }
   } catch {
-    if (stream === 'stderr') {
-      return {
-        type: 'error',
-        payload: { message: line },
-      };
-    }
-
+    // Non-JSON lines from stderr are logged, not treated as user-facing errors.
+    // Real errors are communicated via structured JSON messages.
     return {
       type: 'log',
       payload: { stream, message: line },
@@ -67,19 +63,42 @@ export class CrawlerRuntime {
     }
   ) {}
 
-  stop() {
+  async stop() {
     if (!this.crawlerProcess) {
       return { success: false };
     }
 
-    this.crawlerProcess.kill('SIGINT');
-    this.crawlerProcess = null;
-    return { success: true };
+    const proc = this.crawlerProcess;
+    proc.kill('SIGINT');
+
+    return new Promise<{ success: boolean }>((resolve) => {
+      const killTimeout = setTimeout(() => {
+        try {
+          if (!proc.killed) {
+            proc.kill('SIGKILL');
+          }
+        } catch {
+          // Process may have already exited
+        }
+      }, 5000);
+
+      proc.once('close', () => {
+        clearTimeout(killTimeout);
+        if (this.crawlerProcess === proc) {
+          this.crawlerProcess = null;
+        }
+        resolve({ success: true });
+      });
+    });
   }
 
   cleanup() {
     if (this.crawlerProcess) {
-      this.crawlerProcess.kill();
+      try {
+        this.crawlerProcess.kill('SIGKILL');
+      } catch {
+        // Process may have already exited
+      }
       this.crawlerProcess = null;
     }
   }
@@ -93,6 +112,10 @@ export class CrawlerRuntime {
     const useBundledRuntime = fs.existsSync(paths.bundledExecutable);
 
     this.hasCompleted = false;
+
+    // Load decrypted cookies and inject into config for Python
+    const cookies = loadCookies();
+    const configWithCookies: CrawlerConfig = { ...config, cookies };
 
     return new Promise<{ success: boolean }>((resolve, reject) => {
       if (useBundledRuntime) {
@@ -172,7 +195,7 @@ export class CrawlerRuntime {
         reject(error);
       });
 
-      const payload = JSON.stringify(config) + '\n';
+      const payload = JSON.stringify(configWithCookies) + '\n';
       processRef.stdin?.write(payload, (error) => {
         if (error) {
           reject(error);

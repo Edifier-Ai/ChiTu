@@ -5,7 +5,7 @@ from typing import Dict, Any, List
 def emit_message(message_type: str, payload: Dict[str, Any]) -> None:
     print(
         json.dumps({"type": message_type, "payload": payload}, ensure_ascii=False),
-        file=sys.stderr,
+        file=sys.stdout,
         flush=True,
     )
 
@@ -25,3 +25,6 @@ def output_error(message: str) -> None:
 
 def output_complete(total: int) -> None:
     emit_message("complete", {"total": total})
+
+def output_analysis(analysis_data: Dict[str, Any]) -> None:
+    emit_message("analysis", analysis_data)

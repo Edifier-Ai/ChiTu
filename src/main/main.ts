@@ -2,7 +2,8 @@ import { app, BrowserWindow, dialog, ipcMain } from 'electron';
 import path from 'path';
 import { BridgeMessage, CrawlerConfig, ExportPayload } from '../shared/types';
 import { saveCookies, loadCookies } from './services/cookies';
-import { checkCrawlerEnv } from './services/crawlerEnv';
+import { spawn } from 'child_process';
+import { checkCrawlerEnv, getCrawlerPaths, resolvePythonExecutable } from './services/crawlerEnv';
 import { CrawlerRuntime } from './services/crawlerRuntime';
 import { exportCrawledData } from './services/exporter';
 
@@ -85,6 +86,49 @@ app.commandLine.appendSwitch('no-sandbox');
 app.commandLine.appendSwitch('disable-gpu-sandbox');
 
 app.whenReady().then(() => {
+  ipcMain.handle('analyze-data', async (_, texts: string[]) => {
+    return new Promise((resolve) => {
+      const paths = getCrawlerPaths(app.isPackaged, process.resourcesPath, app.getAppPath());
+      const mcDir = paths.mediaCrawlerDir;
+      const pythonExecutable = resolvePythonExecutable(mcDir);
+      
+      if (!pythonExecutable) {
+        resolve({ error: '未找到可用的 Python 环境进行分析' });
+        return;
+      }
+      
+      const analyzerPath = path.join(paths.legacyCrawlerBase, 'analyzer.py');
+      const child = spawn(pythonExecutable, [analyzerPath]);
+      
+      let output = '';
+      let errorOutput = '';
+      
+      child.stdout.on('data', (data) => {
+        output += data.toString();
+      });
+      
+      child.stderr.on('data', (data) => {
+        errorOutput += data.toString();
+      });
+      
+      child.on('close', (code) => {
+        if (code === 0) {
+          try {
+            resolve(JSON.parse(output));
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            resolve({ error: `解析分析结果失败: ${msg}\n${output}` });
+          }
+        } else {
+          resolve({ error: `分析脚本退出异常 (${code}): ${errorOutput}` });
+        }
+      });
+      
+      child.stdin.write(JSON.stringify({ texts }) + '\n');
+      child.stdin.end();
+    });
+  });
+
   createWindow();
 
   app.on('activate', () => {
@@ -142,6 +186,13 @@ ipcMain.handle('load-cookies', async () => loadCookies());
 
 ipcMain.handle('open-login-window', async (_event, platformId: string) => {
   return new Promise((resolve) => {
+    let resolved = false;
+    const safeResolve = (value: string | null) => {
+      if (resolved) return;
+      resolved = true;
+      resolve(value);
+    };
+
     const loginWindow = new BrowserWindow({
       width: 1000,
       height: 700,
@@ -167,6 +218,7 @@ ipcMain.handle('open-login-window', async (_event, platformId: string) => {
 
     // 监听导航事件以自动检测是否已登录成功
     loginWindow.webContents.on('did-navigate', async () => {
+      if (resolved) return;
       try {
         const cookies = await loginWindow.webContents.session.cookies.get({});
         const cookieMap = Object.fromEntries(cookies.map(c => [c.name, c.value]));
@@ -188,27 +240,36 @@ ipcMain.handle('open-login-window', async (_event, platformId: string) => {
           setTimeout(() => {
             if (!loginWindow.isDestroyed()) {
               loginWindow.destroy();
-              resolve(cookieStr);
             }
+            safeResolve(cookieStr);
           }, 2000);
         }
-      } catch (err) {
-        // ignore
+      } catch {
+        // ignore navigation errors
       }
     });
 
     loginWindow.on('close', async (e) => {
+      if (resolved) return;
       e.preventDefault();
       try {
         const cookies = await loginWindow.webContents.session.cookies.get({});
-        const cookieStr = cookies.map((c: any) => `${c.name}=${c.value}`).join('; ');
+        const cookieStr = cookies.map(c => `${c.name}=${c.value}`).join('; ');
         
         loginWindow.destroy();
-        resolve(cookieStr);
-      } catch (err) {
+        safeResolve(cookieStr);
+      } catch {
         loginWindow.destroy();
-        resolve(null);
+        safeResolve(null);
       }
     });
+
+    // Timeout safety net: resolve after 5 minutes to prevent permanent hang
+    setTimeout(() => {
+      if (!loginWindow.isDestroyed()) {
+        loginWindow.destroy();
+      }
+      safeResolve(null);
+    }, 5 * 60 * 1000);
   });
 });

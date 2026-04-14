@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useReducer, useRef, useEffect } from 'react';
 import { ConfigProvider, theme } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
 import Header from './components/Header';
@@ -11,24 +11,56 @@ import ProgressBar from './components/ProgressBar';
 import ContentPreview from './components/ContentPreview';
 import ActionButtons from './components/ActionButtons';
 import CookieSettings from './components/CookieSettings';
+import { Dashboard } from './components/Dashboard';
 import { ExportFormat, PlatformId } from '../shared/types';
 import { useEnvStatus } from './hooks/useEnvStatus';
 import { useCrawlerController } from './hooks/useCrawlerController';
 import './App.css';
 
+// Consolidated config state — replaces 9 individual useState calls
+interface ConfigState {
+  keywords: string[];
+  includeKeywords: string[];
+  excludeKeywords: string[];
+  platforms: PlatformId[];
+  startDate: string | null;
+  endDate: string | null;
+  count: number;
+  exportFormat: ExportFormat;
+  outputDir: string;
+}
+
+const initialConfig: ConfigState = {
+  keywords: [],
+  includeKeywords: [],
+  excludeKeywords: [],
+  platforms: [],
+  startDate: null,
+  endDate: null,
+  count: 100,
+  exportFormat: 'excel',
+  outputDir: '',
+};
+
+function configReducer(state: ConfigState, update: Partial<ConfigState>): ConfigState {
+  return { ...state, ...update };
+}
+
 const App: React.FC = () => {
+  const [config, updateConfig] = useReducer(configReducer, initialConfig);
   const [themeMode, setThemeMode] = useState<'dark' | 'light'>('dark');
-  const [keywords, setKeywords] = useState<string[]>([]);
-  const [includeKeywords, setIncludeKeywords] = useState<string[]>([]);
-  const [excludeKeywords, setExcludeKeywords] = useState<string[]>([]);
-  const [platforms, setPlatforms] = useState<PlatformId[]>([]);
-  const [startDate, setStartDate] = useState<string | null>(null);
-  const [endDate, setEndDate] = useState<string | null>(null);
-  const [count, setCount] = useState<number>(100);
-  const [exportFormat, setExportFormat] = useState<ExportFormat>('excel');
-  const [outputDir, setOutputDir] = useState<string>('');
   const [showCookieSettings, setShowCookieSettings] = useState(false);
+  const [viewMode, setViewMode] = useState<'list' | 'dashboard'>('list');
   const [notice, setNotice] = useState<string | null>(null);
+  const noticeTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (noticeTimerRef.current) {
+        clearTimeout(noticeTimerRef.current);
+      }
+    };
+  }, []);
 
   const { envStatus, appVersion, refreshEnvStatus } = useEnvStatus();
   const {
@@ -55,43 +87,47 @@ const App: React.FC = () => {
   const handleSelectDir = useCallback(async () => {
     const result = await window.electronAPI.selectOutputDir();
     if (!result.canceled && result.filePaths.length > 0) {
-      setOutputDir(result.filePaths[0]);
+      updateConfig({ outputDir: result.filePaths[0] });
       setError(null);
       setNotice(null);
     }
   }, [setError]);
 
+  const showNotice = useCallback((msg: string) => {
+    if (noticeTimerRef.current) {
+      clearTimeout(noticeTimerRef.current);
+    }
+    setNotice(msg);
+    noticeTimerRef.current = setTimeout(() => {
+      setNotice(null);
+      noticeTimerRef.current = null;
+    }, 5000);
+  }, []);
+
   const handleStart = useCallback(async () => {
+    if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
     setNotice(null);
     const missingCookiePlatforms = envStatus
-      ? platforms.filter((platform) => platform !== 'xiaohongshu' && !envStatus.cookies?.[platform])
+      ? config.platforms.filter((platform) => platform !== 'xiaohongshu' && !envStatus.cookies?.[platform])
       : [];
 
     await startCrawler({
-      keywords,
-      includeKeywords,
-      excludeKeywords,
-      platforms,
-      startDate,
-      endDate,
-      count,
-      outputDir,
-      exportFormat,
+      ...config,
       envReady: Boolean(envStatus?.ready),
       missingCookiePlatforms,
     });
-  }, [envStatus, platforms, keywords, includeKeywords, excludeKeywords, startDate, endDate, count, outputDir, exportFormat, startCrawler]);
+  }, [envStatus, config, startCrawler]);
 
   const handleExport = useCallback(async () => {
     const filePath = await exportData({
-      outputDir,
-      exportFormat,
+      outputDir: config.outputDir,
+      exportFormat: config.exportFormat,
     });
 
     if (filePath) {
-      setNotice(`导出完成：${filePath}`);
+      showNotice(`导出完成：${filePath}`);
     }
-  }, [exportData, outputDir, exportFormat]);
+  }, [exportData, config.outputDir, config.exportFormat, showNotice]);
 
   return (
     <ConfigProvider
@@ -147,40 +183,40 @@ const App: React.FC = () => {
               </div>
             )}
             <KeywordInput
-              keywords={keywords}
-              includeKeywords={includeKeywords}
-              excludeKeywords={excludeKeywords}
-              onKeywordsChange={setKeywords}
-              onIncludeKeywordsChange={setIncludeKeywords}
-              onExcludeKeywordsChange={setExcludeKeywords}
+              keywords={config.keywords}
+              includeKeywords={config.includeKeywords}
+              excludeKeywords={config.excludeKeywords}
+              onKeywordsChange={(keywords) => updateConfig({ keywords })}
+              onIncludeKeywordsChange={(includeKeywords) => updateConfig({ includeKeywords })}
+              onExcludeKeywordsChange={(excludeKeywords) => updateConfig({ excludeKeywords })}
               disabled={isCrawling}
             />
             <PlatformSelector
-              selected={platforms}
-              onChange={setPlatforms}
+              selected={config.platforms}
+              onChange={(platforms) => updateConfig({ platforms })}
               disabled={isCrawling}
             />
             <DateRangePicker
-              startDate={startDate}
-              endDate={endDate}
-              onStartDateChange={setStartDate}
-              onEndDateChange={setEndDate}
+              startDate={config.startDate}
+              endDate={config.endDate}
+              onStartDateChange={(startDate) => updateConfig({ startDate })}
+              onEndDateChange={(endDate) => updateConfig({ endDate })}
               disabled={isCrawling}
             />
             <CountSelector
-              value={count}
-              onChange={setCount}
+              value={config.count}
+              onChange={(count) => updateConfig({ count })}
               disabled={isCrawling}
             />
             <ExportFormatSelector
-              value={exportFormat}
-              onChange={setExportFormat}
+              value={config.exportFormat}
+              onChange={(exportFormat) => updateConfig({ exportFormat })}
               disabled={isCrawling}
             />
             <div className="output-dir">
               <div className="output-dir-label">
                 <span className="label">输出目录</span>
-                {outputDir && <span className="dir-path">{outputDir}</span>}
+                {config.outputDir && <span className="dir-path">{config.outputDir}</span>}
               </div>
               <button
                 className="select-dir-btn"
@@ -196,7 +232,7 @@ const App: React.FC = () => {
             <ProgressBar
               progress={progress}
               isCrawling={isCrawling}
-              totalExpected={keywords.length * platforms.length * count}
+              totalExpected={config.keywords.length * config.platforms.length * config.count}
               crawledCount={crawledData.length}
             />
 
@@ -208,13 +244,34 @@ const App: React.FC = () => {
             )}
 
             {notice && (
-              <div className="error-message success-message">
-                <span className="error-icon">✓</span>
+              <div className="notice-message">
+                <span className="notice-icon">✓</span>
                 {notice}
               </div>
             )}
 
-            <ContentPreview data={crawledData} />
+            {crawledData.length > 0 && (
+              <div className="view-toggle">
+                <button 
+                  className={`view-toggle-btn ${viewMode === 'list' ? 'active' : ''}`}
+                  onClick={() => setViewMode('list')}
+                >
+                  实时预览
+                </button>
+                <button 
+                  className={`view-toggle-btn ${viewMode === 'dashboard' ? 'active' : ''}`}
+                  onClick={() => setViewMode('dashboard')}
+                >
+                  数据大盘
+                </button>
+              </div>
+            )}
+
+            {viewMode === 'list' || crawledData.length === 0 ? (
+              <ContentPreview data={crawledData} />
+            ) : (
+              <Dashboard data={crawledData} isCrawling={isCrawling} />
+            )}
           </div>
         </div>
 
