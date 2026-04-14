@@ -1,18 +1,27 @@
 import sys
 import json
-import jieba
-import jieba.analyse
-from snownlp import SnowNLP
+import traceback
 
 def analyze():
+    # Use sys.stdin.read() to read everything until EOF
     input_data = sys.stdin.read().strip()
     if not input_data:
+        print(json.dumps({"error": "No input data received"}))
         return
         
     try:
         data = json.loads(input_data)
         texts = data.get("texts", [])
         
+        # Import lazily to avoid loading overhead and catch import errors
+        try:
+            import jieba
+            import jieba.analyse
+            from snownlp import SnowNLP
+        except ImportError as e:
+            print(json.dumps({"error": f"Missing dependencies: {str(e)}"}))
+            return
+            
         # 1. Sentiment Analysis
         sentiments = []
         positive_count = 0
@@ -57,7 +66,11 @@ def analyze():
         print(json.dumps(result, ensure_ascii=False))
         
     except Exception as e:
-        print(json.dumps({"error": str(e)}))
+        error_info = {
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
+        print(json.dumps(error_info))
 
 if __name__ == "__main__":
     analyze()

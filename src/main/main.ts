@@ -111,21 +111,46 @@ app.whenReady().then(() => {
         errorOutput += data.toString();
       });
       
+      child.stdin.on('error', (err: any) => {
+        if (err.code === 'EPIPE') {
+          // Process exited before we finished writing
+          // The close event will handle resolving with the error output
+          return;
+        }
+        resolve({ error: `写入数据到分析进程失败: ${err.message}` });
+      });
+
+      child.on('error', (err) => {
+        resolve({ error: `启动分析进程失败: ${err.message}` });
+      });
+
       child.on('close', (code) => {
-        if (code === 0) {
+        // If there's an EPIPE error, output might be empty and errorOutput might have the stack trace
+        if (code === 0 || output) {
           try {
-            resolve(JSON.parse(output));
+            const parsed = JSON.parse(output);
+            if (parsed.error) {
+              resolve({ error: `分析脚本内部错误: ${parsed.error}` });
+            } else {
+              resolve(parsed);
+            }
           } catch (e) {
             const msg = e instanceof Error ? e.message : String(e);
-            resolve({ error: `解析分析结果失败: ${msg}\n${output}` });
+            resolve({ error: `解析分析结果失败: ${msg}\n${output || errorOutput}` });
           }
         } else {
           resolve({ error: `分析脚本退出异常 (${code}): ${errorOutput}` });
         }
       });
       
-      child.stdin.write(JSON.stringify({ texts }) + '\n');
-      child.stdin.end();
+      try {
+        child.stdin.write(JSON.stringify({ texts }) + '\n');
+        child.stdin.end();
+      } catch (err: any) {
+        if (err.code !== 'EPIPE') {
+          resolve({ error: `写入数据异常: ${err.message}` });
+        }
+      }
     });
   });
 
