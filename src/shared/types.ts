@@ -26,9 +26,9 @@ export interface CrawlerProgress {
   current: number;
   total: number;
   data: CrawledItem[];
-  filtered?: number;  // 被过滤掉的数量
-  actual?: number;    // 实际有效数量
 }
+
+export type AccountIdentificationPlatformId = 'xiaohongshu' | 'douyin' | 'weibo';
 
 export interface EnvStatus {
   ready: boolean;
@@ -58,7 +58,54 @@ export interface CrawlerConfig {
   count: number;
   outputDir: string;
   exportFormat: ExportFormat;
-  cookies?: Record<string, string>;
+  incremental?: boolean;
+  sinceTimestamp?: string | null;
+}
+
+export interface AccountIdentificationConfig {
+  taskType: 'account_identification';
+  companyName: string;
+  keywords: string[];
+  platforms: AccountIdentificationPlatformId[];
+  count: number;
+  outputDir: string;
+  exportFormat: ExportFormat;
+}
+
+export interface EmployeeAccountResult {
+  rank: number;
+  platform: AccountIdentificationPlatformId;
+  platformName: string;
+  accountName: string;
+  suspectedEmployeeName: string;
+  userId: string;
+  profileUrl: string;
+  followersCount: number | null;
+  followersText: string;
+  confidenceLevel: '高' | '中' | '低';
+  confidenceScore: number;
+  evidence: string[];
+  matchedPostCount: number;
+  latestActiveAt: string;
+  sourceKeywords: string[];
+  collectedAt: string;
+  rawBio?: string;
+  rawVerifiedReason?: string;
+}
+
+export interface AccountIdentificationProgress {
+  companyName: string;
+  platform: string;
+  current: number;
+  total: number;
+  data: EmployeeAccountResult[];
+}
+
+export interface AccountIdentificationPayload {
+  data: EmployeeAccountResult[];
+  outputDir: string;
+  exportFormat: ExportFormat;
+  companyName: string;
 }
 
 export interface ExportPayload {
@@ -71,6 +118,8 @@ export interface ExportResult {
   success: boolean;
   filePath?: string;
   error?: string;
+  itemCount?: number;
+  format?: ExportFormat;
 }
 
 export interface CrawlerStartResult {
@@ -86,6 +135,47 @@ export interface SaveCookiesResult {
   error?: string;
 }
 
+export interface UpdateCheckResult {
+  hasUpdate: boolean;
+  latestVersion?: string;
+  currentVersion?: string;
+  url?: string;
+  name?: string;
+  error?: string;
+}
+
+export interface TaskHistoryRecord {
+  timestamp: string;
+  keywords: string[];
+  platforms: string[];
+  count: number;
+  outputDir: string;
+  exportFormat: string;
+  status: 'running' | 'completed' | 'failed';
+  totalItems?: number;
+}
+
+export interface AppSettings {
+  theme: 'dark' | 'light';
+  firstRun: boolean;
+  onboardingCompleted: boolean;
+  notificationsEnabled: boolean;
+  badgeEnabled: boolean;
+  lastCrawlTimestamps: Record<string, string>;
+}
+
+export interface SettingsResult {
+  success: boolean;
+  settings?: AppSettings;
+  error?: string;
+}
+
+export interface NotificationPayload {
+  title: string;
+  body: string;
+  silent?: boolean;
+}
+
 export interface SelectDirectoryResult {
   canceled: boolean;
   filePaths: string[];
@@ -94,6 +184,11 @@ export interface SelectDirectoryResult {
 export interface BridgeProgressMessage {
   type: 'progress';
   payload: CrawlerProgress;
+}
+
+export interface BridgeAccountProgressMessage {
+  type: 'account-progress';
+  payload: AccountIdentificationProgress;
 }
 
 export interface BridgeErrorMessage {
@@ -108,6 +203,7 @@ export interface BridgeCompleteMessage {
   payload: {
     total: number;
     code?: number | null;
+    taskType?: 'content' | 'account_identification' | null;
   };
 }
 
@@ -121,35 +217,31 @@ export interface BridgeLogMessage {
 
 export type BridgeMessage =
   | BridgeProgressMessage
+  | BridgeAccountProgressMessage
   | BridgeErrorMessage
   | BridgeCompleteMessage
   | BridgeLogMessage;
-
-export interface AiConfig {
-  baseUrl: string;
-  apiKey: string;
-  model: string;
-}
-
-export interface AppSettings {
-  ai?: AiConfig;
-}
 
 export interface ElectronAPI {
   selectOutputDir: () => Promise<SelectDirectoryResult>;
   getAppVersion: () => Promise<string>;
   checkCrawlerEnv: () => Promise<EnvStatus>;
   startCrawler: (config: CrawlerConfig) => Promise<CrawlerStartResult>;
+  startAccountIdentification: (config: AccountIdentificationConfig) => Promise<CrawlerStartResult>;
   stopCrawler: () => Promise<StopCrawlerResult>;
   exportCrawledData: (payload: ExportPayload) => Promise<ExportResult>;
+  exportAccountIdentificationData: (payload: AccountIdentificationPayload) => Promise<ExportResult>;
   onCrawlerProgress: (callback: (data: CrawlerProgress) => void) => () => void;
+  onAccountIdentificationProgress: (callback: (data: AccountIdentificationProgress) => void) => () => void;
   onCrawlerError: (callback: (error: string) => void) => () => void;
   onCrawlerComplete: (callback: (result: BridgeCompleteMessage['payload']) => void) => () => void;
   saveCookies: (cookies: Record<string, string>) => Promise<SaveCookiesResult>;
   loadCookies: () => Promise<Record<string, string>>;
-  saveSettings: (settings: Partial<AppSettings>) => Promise<{ success: boolean; error?: string }>;
-  loadSettings: () => Promise<AppSettings>;
-  openLoginWindow: (platformId: string) => Promise<string | null>;
-  analyzeData: (texts: string[]) => Promise<any>;
-  aiAnalyzeData: (prompt: string, texts: string[]) => Promise<{ result?: string; error?: string }>;
+  checkForUpdate: () => Promise<UpdateCheckResult>;
+  getTaskHistory: () => Promise<TaskHistoryRecord[]>;
+  getSettings: () => Promise<SettingsResult>;
+  setSettings: (partial: Partial<AppSettings>) => Promise<SettingsResult>;
+  showNotification: (payload: NotificationPayload) => void;
+  openFolder: (filePath: string) => Promise<{ success: boolean }>;
+  copyToClipboard: (text: string) => Promise<{ success: boolean }>;
 }

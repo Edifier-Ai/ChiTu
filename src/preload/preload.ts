@@ -1,17 +1,34 @@
 import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron';
-import { BridgeCompleteMessage, CrawlerConfig, CrawlerProgress, ExportPayload, AppSettings } from '../shared/types';
+import {
+  AccountIdentificationConfig,
+  AccountIdentificationPayload,
+  AccountIdentificationProgress,
+  AppSettings,
+  BridgeCompleteMessage,
+  CrawlerConfig,
+  CrawlerProgress,
+  ExportPayload,
+  NotificationPayload,
+} from '../shared/types';
 
 contextBridge.exposeInMainWorld('electronAPI', {
   selectOutputDir: () => ipcRenderer.invoke('select-output-dir'),
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
   checkCrawlerEnv: () => ipcRenderer.invoke('check-crawler-env'),
   startCrawler: (config: CrawlerConfig) => ipcRenderer.invoke('start-crawler', config),
+  startAccountIdentification: (config: AccountIdentificationConfig) => ipcRenderer.invoke('start-account-identification', config),
   stopCrawler: () => ipcRenderer.invoke('stop-crawler'),
   exportCrawledData: (payload: ExportPayload) => ipcRenderer.invoke('export-crawled-data', payload),
+  exportAccountIdentificationData: (payload: AccountIdentificationPayload) => ipcRenderer.invoke('export-account-identification-data', payload),
   onCrawlerProgress: (callback: (data: CrawlerProgress) => void) => {
     const handler = (_: IpcRendererEvent, data: CrawlerProgress) => callback(data);
     ipcRenderer.on('crawler-progress', handler);
     return () => ipcRenderer.removeListener('crawler-progress', handler);
+  },
+  onAccountIdentificationProgress: (callback: (data: AccountIdentificationProgress) => void) => {
+    const handler = (_: IpcRendererEvent, data: AccountIdentificationProgress) => callback(data);
+    ipcRenderer.on('account-identification-progress', handler);
+    return () => ipcRenderer.removeListener('account-identification-progress', handler);
   },
   onCrawlerError: (callback: (error: string) => void) => {
     const handler = (_: IpcRendererEvent, error: string) => callback(error);
@@ -25,9 +42,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   saveCookies: (cookies: Record<string, string>) => ipcRenderer.invoke('save-cookies', cookies),
   loadCookies: () => ipcRenderer.invoke('load-cookies'),
-  saveSettings: (settings: Partial<AppSettings>) => ipcRenderer.invoke('save-settings', settings),
-  loadSettings: () => ipcRenderer.invoke('load-settings'),
-  openLoginWindow: (platformId: string) => ipcRenderer.invoke('open-login-window', platformId),
-  analyzeData: (texts: string[]) => ipcRenderer.invoke('analyze-data', texts),
-  aiAnalyzeData: (prompt: string, texts: string[]) => ipcRenderer.invoke('ai-analyze-data', prompt, texts),
+  checkForUpdate: () => ipcRenderer.invoke('check-for-update'),
+  getTaskHistory: () => ipcRenderer.invoke('get-task-history'),
+  getSettings: () => ipcRenderer.invoke('get-settings'),
+  setSettings: (partial: Partial<AppSettings>) => ipcRenderer.invoke('set-settings', partial),
+  showNotification: (payload: NotificationPayload) => ipcRenderer.invoke('show-notification', payload),
+  openFolder: (filePath: string) => ipcRenderer.invoke('open-folder', filePath),
+  copyToClipboard: (text: string) => ipcRenderer.invoke('copy-to-clipboard', text),
 });

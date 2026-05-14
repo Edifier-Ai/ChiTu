@@ -1,11 +1,8 @@
 import fs from 'fs';
 import path from 'path';
-import { execFile } from 'child_process';
-import { promisify } from 'util';
+import { spawnSync } from 'child_process';
 import { EnvStatus } from '../../shared/types';
 import { loadCookies } from './cookies';
-
-const execFileAsync = promisify(execFile);
 
 export interface CrawlerPaths {
   bundledBaseDir: string;
@@ -58,31 +55,18 @@ export function resolvePythonExecutable(mcDir: string) {
   return null;
 }
 
-async function runPythonCheckAsync(
-  pythonExecutable: string,
-  code: string,
-  extraEnv?: NodeJS.ProcessEnv
-): Promise<{ stdout: string; stderr: string }> {
-  try {
-    return await execFileAsync(pythonExecutable, ['-c', code], {
-      encoding: 'utf-8',
-      timeout: 15000,
-      env: {
-        ...process.env,
-        ...extraEnv,
-      },
-    });
-  } catch (error) {
-    // execFile rejects on non-zero exit or timeout
-    const execError = error as { stdout?: string; stderr?: string };
-    return {
-      stdout: execError.stdout || '',
-      stderr: execError.stderr || '',
-    };
-  }
+function runPythonCheck(pythonExecutable: string, code: string, extraEnv?: NodeJS.ProcessEnv) {
+  return spawnSync(pythonExecutable, ['-c', code], {
+    encoding: 'utf-8',
+    timeout: 15000,
+    env: {
+      ...process.env,
+      ...extraEnv,
+    },
+  });
 }
 
-export async function checkCrawlerEnv(isPackaged: boolean, resourcesPath: string, appPath: string): Promise<EnvStatus> {
+export function checkCrawlerEnv(isPackaged: boolean, resourcesPath: string, appPath: string): EnvStatus {
   const paths = getCrawlerPaths(isPackaged, resourcesPath, appPath);
   const cookies = loadCookies();
   const bundledExecutableExists = fs.existsSync(paths.bundledExecutable);
@@ -142,18 +126,13 @@ export async function checkCrawlerEnv(isPackaged: boolean, resourcesPath: string
 
   result.pythonExecutable = pythonExecutable;
 
-  // Async version check — no longer blocks the main process
-  try {
-    const versionResult = await execFileAsync(pythonExecutable, ['-V'], {
-      encoding: 'utf-8',
-      timeout: 10000,
-    });
-    result.pythonVersion = `${versionResult.stdout || versionResult.stderr}`.trim();
-  } catch {
-    result.pythonVersion = 'unknown';
-  }
+  const versionCheck = spawnSync(pythonExecutable, ['-V'], {
+    encoding: 'utf-8',
+    timeout: 10000,
+  });
+  result.pythonVersion = `${versionCheck.stdout || versionCheck.stderr}`.trim();
 
-  const playwrightCheck = await runPythonCheckAsync(
+  const playwrightCheck = runPythonCheck(
     pythonExecutable,
     `
 import json

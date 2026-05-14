@@ -11,7 +11,19 @@ media_crawler_dir = project_root / "crawler" / "MediaCrawler"
 pyproject_path = media_crawler_dir / "pyproject.toml"
 
 def collect_media_crawler_datas(root: Path):
-    skipped_parts = {".git", ".github", ".venv", "__pycache__", "test", "tests"}
+    skipped_parts = {
+        ".git",
+        ".github",
+        ".venv",
+        "__pycache__",
+        "browser_data",
+        "data",
+        "docs",
+        "log",
+        "logs",
+        "test",
+        "tests",
+    }
     collected = []
 
     for file_path in root.rglob("*"):
@@ -84,6 +96,36 @@ third_party_packages = {
     "pygments",
 }
 
+excluded_module_prefixes = (
+    "aiosqlite.tests",
+    "alembic.testing",
+    "matplotlib.testing",
+    "matplotlib.tests",
+    "pandas.tests",
+    "pytest",
+)
+
+excluded_module_fragments = (
+    ".tests.",
+    ".test.",
+    ".testing.",
+    ".benchmarks.",
+    ".examples.",
+    "._hypothesis",
+)
+
+collect_all_packages = {
+    "playwright",
+}
+
+def should_exclude_module(module_name: str) -> bool:
+    return module_name.startswith(excluded_module_prefixes) or any(
+        fragment in module_name for fragment in excluded_module_fragments
+    )
+
+def filter_hiddenimports(imports):
+    return [module_name for module_name in imports if not should_exclude_module(module_name)]
+
 if pyproject_path.exists():
     pyproject_text = pyproject_path.read_text(encoding="utf-8")
     for match in re.findall(r'"([^"]+)"', pyproject_text):
@@ -109,7 +151,7 @@ for package_name in (
     "rich",
     "shellingham",
 ):
-    hiddenimports += collect_submodules(package_name)
+    hiddenimports += filter_hiddenimports(collect_submodules(package_name))
 
 package_aliases = {
     "Pillow": "PIL",
@@ -121,13 +163,11 @@ package_aliases = {
 
 for package_name in sorted(third_party_packages):
     module_name = package_aliases.get(package_name, package_name)
-    try:
-        pkg_datas, pkg_binaries, pkg_hiddenimports = collect_all(module_name)
-        datas += pkg_datas
-        hiddenimports += pkg_hiddenimports
-    except Exception:
+    if package_name in collect_all_packages or module_name in collect_all_packages:
         try:
-            hiddenimports += collect_submodules(module_name)
+            pkg_datas, pkg_binaries, pkg_hiddenimports = collect_all(module_name)
+            datas += pkg_datas
+            hiddenimports += filter_hiddenimports(pkg_hiddenimports)
         except Exception:
             pass
 
@@ -141,11 +181,18 @@ a = Analysis(
     pathex=[str(media_crawler_dir)],
     binaries=[],
     datas=datas,
-    hiddenimports=hiddenimports,
+    hiddenimports=filter_hiddenimports(hiddenimports),
     hookspath=[str(media_crawler_dir / ".venv" / "lib" / "python3.11" / "site-packages" / "playwright" / "_impl" / "__pyinstaller")],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=[
+        "aiosqlite.tests",
+        "alembic.testing",
+        "matplotlib.testing",
+        "matplotlib.tests",
+        "pandas.tests",
+        "pytest",
+    ],
     noarchive=False,
     optimize=0,
 )

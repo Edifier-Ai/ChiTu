@@ -1,18 +1,34 @@
-import { app, BrowserWindow, dialog, ipcMain } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Notification, shell } from 'electron';
+import fs from 'fs';
 import path from 'path';
-import { BridgeMessage, CrawlerConfig, ExportPayload, AppSettings } from '../shared/types';
+import https from 'https';
+import logger from 'electron-log';
+import { AccountIdentificationConfig, AccountIdentificationPayload, BridgeMessage, CrawlerConfig, ExportPayload } from '../shared/types';
 import { saveCookies, loadCookies } from './services/cookies';
-import { saveSettings, loadSettings } from './services/settings';
-import { spawn } from 'child_process';
-import { checkCrawlerEnv, getCrawlerPaths, resolvePythonExecutable } from './services/crawlerEnv';
+import { checkCrawlerEnv } from './services/crawlerEnv';
 import { CrawlerRuntime } from './services/crawlerRuntime';
-import { exportCrawledData } from './services/exporter';
+import { exportAccountIdentificationData, exportCrawledData } from './services/exporter';
+import { appendTaskHistory, readTaskHistory, updateLastTaskStatus } from './services/taskHistory';
+import { loadSettings, saveSettings } from './services/settings';
 
 let mainWindow: BrowserWindow | null = null;
+let activeTaskType: 'content' | 'account_identification' | null = null;
+
+function hasBundledApp() {
+  return fs.existsSync(path.join(__dirname, '../renderer/index.html'));
+}
+
+function hasBundledCrawler() {
+  return fs.existsSync(path.join(process.resourcesPath, 'app.asar.unpacked', 'dist_crawler', 'crawler'));
+}
+
+function isProductionRuntime() {
+  return app.isPackaged || hasBundledApp() || hasBundledCrawler();
+}
 
 const runtime = new CrawlerRuntime({
   get isPackaged() {
-    return app.isPackaged;
+    return isProductionRuntime();
   },
   get resourcesPath() {
     return process.resourcesPath;
@@ -21,6 +37,20 @@ const runtime = new CrawlerRuntime({
     return app.getAppPath();
   },
 });
+
+function showNativeNotification(title: string, body: string) {
+  if (!Notification.isSupported()) return;
+  new Notification({ title, body }).show();
+}
+
+function updateDockBadge(count: number) {
+  if (process.platform === 'darwin') {
+    app.dock?.setBadge(count > 0 ? String(count) : '');
+  }
+  if (mainWindow && count > 0) {
+    mainWindow.flashFrame(true);
+  }
+}
 
 function sendBridgeMessage(message: BridgeMessage) {
   if (!mainWindow) {
@@ -32,17 +62,32 @@ function sendBridgeMessage(message: BridgeMessage) {
     return;
   }
 
+  if (message.type === 'account-progress') {
+    mainWindow.webContents.send('account-identification-progress', message.payload);
+    return;
+  }
+
   if (message.type === 'error') {
     mainWindow.webContents.send('crawler-error', message.payload.message);
+    showNativeNotification(activeTaskType === 'account_identification' ? '账号识别失败' : '采集失败', message.payload.message);
+    updateDockBadge(0);
     return;
   }
 
   if (message.type === 'complete') {
-    mainWindow.webContents.send('crawler-complete', message.payload);
+    const completePayload = { ...message.payload, taskType: activeTaskType };
+    mainWindow.webContents.send('crawler-complete', completePayload);
+    if (activeTaskType === 'account_identification') {
+      showNativeNotification('账号识别完成', `共识别 ${completePayload.total} 个账号`);
+    } else {
+      updateLastTaskStatus('completed', completePayload.total);
+      showNativeNotification('采集完成', `共采集 ${completePayload.total} 条数据`);
+    }
+    updateDockBadge(1);
     return;
   }
 
-  console.log(`[crawler:${message.payload.stream}] ${message.payload.message}`);
+  logger.info(`[crawler:${message.payload.stream}] ${message.payload.message}`);
 }
 
 function createWindow() {
@@ -62,7 +107,7 @@ function createWindow() {
     },
   });
 
-  if (process.env.NODE_ENV === 'development' || !app.isPackaged) {
+  if (process.env.NODE_ENV === 'development' && !hasBundledApp()) {
     mainWindow.loadURL('http://localhost:5173');
     mainWindow.webContents.openDevTools();
   } else {
@@ -72,145 +117,16 @@ function createWindow() {
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
+
+  mainWindow.on('focus', () => {
+    if (process.platform === 'darwin') {
+      app.dock?.setBadge('');
+    }
+    mainWindow?.flashFrame(false);
+  });
 }
-
-// Remove disableHardwareAcceleration as it causes severe UI lag in React
-// app.disableHardwareAcceleration();
-
-// Change user data dir to project root for dev environment
-if (process.env.NODE_ENV === 'development') {
-  app.setPath('userData', path.join(process.cwd(), '.chitu_data'));
-}
-
-// Disable sandbox for Linux/macOS issues in some environments
-app.commandLine.appendSwitch('no-sandbox');
-app.commandLine.appendSwitch('disable-gpu-sandbox');
 
 app.whenReady().then(() => {
-  ipcMain.handle('analyze-data', async (_, texts: string[]) => {
-    return new Promise((resolve) => {
-      const paths = getCrawlerPaths(app.isPackaged, process.resourcesPath, app.getAppPath());
-      const mcDir = paths.mediaCrawlerDir;
-      const pythonExecutable = resolvePythonExecutable(mcDir);
-      
-      if (!pythonExecutable) {
-        resolve({ error: '未找到可用的 Python 环境进行分析' });
-        return;
-      }
-      
-      const analyzerPath = path.join(paths.legacyCrawlerBase, 'analyzer.py');
-      const child = spawn(pythonExecutable, [analyzerPath]);
-      
-      let output = '';
-      let errorOutput = '';
-      
-      child.stdout.on('data', (data) => {
-        output += data.toString();
-      });
-      
-      child.stderr.on('data', (data) => {
-        errorOutput += data.toString();
-      });
-      
-      child.stdin.on('error', (err: any) => {
-        if (err.code === 'EPIPE') {
-          // Process exited before we finished writing
-          // The close event will handle resolving with the error output
-          return;
-        }
-        resolve({ error: `写入数据到分析进程失败: ${err.message}` });
-      });
-
-      child.on('error', (err) => {
-        resolve({ error: `启动分析进程失败: ${err.message}` });
-      });
-
-      child.on('close', (code) => {
-        // If there's an EPIPE error, output might be empty and errorOutput might have the stack trace
-        if (code === 0 || output) {
-          try {
-            const parsed = JSON.parse(output);
-            if (parsed.error) {
-              resolve({ error: `分析脚本内部错误: ${parsed.error}` });
-            } else {
-              resolve(parsed);
-            }
-          } catch (e) {
-            const msg = e instanceof Error ? e.message : String(e);
-            resolve({ error: `解析分析结果失败: ${msg}\n${output || errorOutput}` });
-          }
-        } else {
-          resolve({ error: `分析脚本退出异常 (${code}): ${errorOutput}` });
-        }
-      });
-      
-      try {
-        child.stdin.write(JSON.stringify({ texts }) + '\n');
-        child.stdin.end();
-      } catch (err: any) {
-        if (err.code !== 'EPIPE') {
-          resolve({ error: `写入数据异常: ${err.message}` });
-        }
-      }
-    });
-  });
-
-  ipcMain.handle('save-settings', async (_, settings: Partial<AppSettings>) => {
-    return saveSettings(settings);
-  });
-
-  ipcMain.handle('load-settings', async () => {
-    return loadSettings();
-  });
-
-  ipcMain.handle('ai-analyze-data', async (_, prompt: string, texts: string[]) => {
-    try {
-      const settings = loadSettings();
-      const aiConfig = settings.ai;
-      
-      if (!aiConfig?.baseUrl || !aiConfig?.apiKey || !aiConfig?.model) {
-        return { error: '未配置 AI 模型信息，请先前往设置进行配置' };
-      }
-
-      // Prepare the payload for OpenAI-compatible endpoint
-      // Limit texts to avoid hitting token limits immediately, let's take up to ~500 items max and truncate
-      const sampleTexts = texts.slice(0, 300).map(t => t.substring(0, 500));
-      const contentStr = sampleTexts.map((t, i) => `[${i+1}] ${t}`).join('\n');
-
-      const messages = [
-        { role: 'system', content: '你是一个资深的数据分析专家，负责对用户采集的社交媒体数据进行深度挖掘和洞察分析。请基于用户提供的数据内容，给出结构化、清晰的结论。' },
-        { role: 'user', content: `${prompt}\n\n以下是部分采集到的数据内容片段：\n${contentStr}` }
-      ];
-
-      // Assuming OpenAI compatible API
-      const url = new URL('/v1/chat/completions', aiConfig.baseUrl).toString();
-      
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${aiConfig.apiKey}`
-        },
-        body: JSON.stringify({
-          model: aiConfig.model,
-          messages,
-          temperature: 0.7,
-        })
-      });
-
-      if (!response.ok) {
-        const errText = await response.text();
-        return { error: `AI 请求失败: ${response.status} ${response.statusText}\n${errText}` };
-      }
-
-      const json = await response.json() as any;
-      const result = json.choices?.[0]?.message?.content;
-      return { result };
-    } catch (error) {
-      return { error: error instanceof Error ? error.message : String(error) };
-    }
-  });
-
   createWindow();
 
   app.on('activate', () => {
@@ -241,21 +157,52 @@ ipcMain.handle('select-output-dir', async () => {
 ipcMain.handle('get-app-version', async () => app.getVersion());
 
 ipcMain.handle('check-crawler-env', async () => {
-  return checkCrawlerEnv(app.isPackaged, process.resourcesPath, app.getAppPath());
+  return checkCrawlerEnv(isProductionRuntime(), process.resourcesPath, app.getAppPath());
 });
 
 ipcMain.handle('start-crawler', async (_event, config: CrawlerConfig) => {
+  appendTaskHistory({
+    timestamp: new Date().toISOString(),
+    keywords: config.keywords,
+    platforms: config.platforms,
+    count: config.count,
+    outputDir: config.outputDir,
+    exportFormat: config.exportFormat,
+    status: 'running',
+  });
   try {
+    activeTaskType = 'content';
     return await runtime.start(config, sendBridgeMessage);
   } catch (error) {
     const message = error instanceof Error ? error.message : '启动采集失败';
+    updateLastTaskStatus('failed');
     sendBridgeMessage({
       type: 'error',
       payload: { message },
     });
     throw error;
+  } finally {
+    activeTaskType = null;
   }
 });
+
+ipcMain.handle('start-account-identification', async (_event, config: AccountIdentificationConfig) => {
+  try {
+    activeTaskType = 'account_identification';
+    return await runtime.start(config, sendBridgeMessage);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '启动账号识别失败';
+    sendBridgeMessage({
+      type: 'error',
+      payload: { message },
+    });
+    throw error;
+  } finally {
+    activeTaskType = null;
+  }
+});
+
+ipcMain.handle('get-task-history', async () => readTaskHistory(10));
 
 ipcMain.handle('stop-crawler', () => runtime.stop());
 
@@ -263,95 +210,76 @@ ipcMain.handle('export-crawled-data', async (_event, payload: ExportPayload) => 
   return exportCrawledData(payload.data, payload.outputDir, payload.exportFormat);
 });
 
+ipcMain.handle('export-account-identification-data', async (_event, payload: AccountIdentificationPayload) => {
+  return exportAccountIdentificationData(payload.data, payload.outputDir, payload.exportFormat, payload.companyName);
+});
+
 ipcMain.handle('save-cookies', async (_event, cookies: Record<string, string>) => saveCookies(cookies));
 ipcMain.handle('load-cookies', async () => loadCookies());
 
-ipcMain.handle('open-login-window', async (_event, platformId: string) => {
-  return new Promise((resolve) => {
-    let resolved = false;
-    const safeResolve = (value: string | null) => {
-      if (resolved) return;
-      resolved = true;
-      resolve(value);
-    };
+ipcMain.handle('get-settings', async () => loadSettings());
+ipcMain.handle('set-settings', async (_event, partial) => saveSettings(partial));
 
-    const loginWindow = new BrowserWindow({
-      width: 1000,
-      height: 700,
-      parent: mainWindow || undefined,
-      modal: !!mainWindow,
-      titleBarStyle: 'default',
-      title: '请登录并完成验证，完成后直接关闭窗口即可',
-      webPreferences: {
-        nodeIntegration: false,
-        contextIsolation: true,
-        partition: `persist:${platformId}`,
-      }
-    });
+ipcMain.handle('show-notification', async (_event, payload) => {
+  if (!Notification.isSupported()) return;
+  const notification = new Notification(payload);
+  notification.show();
+});
 
-    const urls: Record<string, string> = {
-      'xiaohongshu': 'https://www.xiaohongshu.com',
-      'weibo': 'https://weibo.com',
-      'douyin': 'https://www.douyin.com',
-      'bilibili': 'https://www.bilibili.com',
-    };
+ipcMain.handle('open-folder', async (_event, filePath: string) => {
+  try {
+    await shell.showItemInFolder(filePath);
+    return { success: true };
+  } catch {
+    return { success: false };
+  }
+});
 
-    loginWindow.loadURL(urls[platformId] || 'https://www.google.com');
+ipcMain.handle('copy-to-clipboard', async (_event, text: string) => {
+  clipboard.writeText(text);
+  return { success: true };
+});
 
-    // 监听导航事件以自动检测是否已登录成功
-    loginWindow.webContents.on('did-navigate', async () => {
-      if (resolved) return;
-      try {
-        const cookies = await loginWindow.webContents.session.cookies.get({});
-        const cookieMap = Object.fromEntries(cookies.map(c => [c.name, c.value]));
-        
-        let loggedIn = false;
-        if (platformId === 'bilibili' && cookieMap['SESSDATA']) {
-          loggedIn = true;
-        } else if (platformId === 'xiaohongshu' && cookieMap['a1'] && cookieMap['web_session']) {
-          loggedIn = true;
-        } else if (platformId === 'douyin' && cookieMap['sessionid']) {
-          loggedIn = true;
-        } else if (platformId === 'weibo' && cookieMap['SUB']) {
-          loggedIn = true;
-        }
-
-        if (loggedIn) {
-          const cookieStr = cookies.map(c => `${c.name}=${c.value}`).join('; ');
-          // 等待页面完全加载，避免影响平台种下额外的风控cookie
-          setTimeout(() => {
-            if (!loginWindow.isDestroyed()) {
-              loginWindow.destroy();
-            }
-            safeResolve(cookieStr);
-          }, 2000);
-        }
-      } catch {
-        // ignore navigation errors
-      }
-    });
-
-    loginWindow.on('close', async (e) => {
-      if (resolved) return;
-      e.preventDefault();
-      try {
-        const cookies = await loginWindow.webContents.session.cookies.get({});
-        const cookieStr = cookies.map(c => `${c.name}=${c.value}`).join('; ');
-        
-        loginWindow.destroy();
-        safeResolve(cookieStr);
-      } catch {
-        loginWindow.destroy();
-        safeResolve(null);
-      }
-    });
-
-    // Timeout safety net: resolve after 5 minutes to prevent permanent hang
-    setTimeout(() => {
-      if (!loginWindow.isDestroyed()) {
-        loginWindow.destroy();
-      }
-      safeResolve(null);
-    }, 5 * 60 * 1000);
+function fetchJSON<T>(url: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    https
+      .get(url, { headers: { 'User-Agent': 'ChiTu-App' } }, (res) => {
+        let data = '';
+        res.on('data', (chunk) => (data += chunk));
+        res.on('end', () => {
+          try {
+            resolve(JSON.parse(data) as T);
+          } catch {
+            reject(new Error('Invalid JSON'));
+          }
+        });
+      })
+      .on('error', reject);
   });
+}
+
+ipcMain.handle('check-for-update', async () => {
+  const ownerRepo = process.env.CHITU_UPDATE_REPO || '';
+  if (!ownerRepo) {
+    return { hasUpdate: false, error: '未配置更新源' };
+  }
+  try {
+    const release = await fetchJSON<{
+      tag_name: string;
+      html_url: string;
+      name: string;
+    }>(`https://api.github.com/repos/${ownerRepo}/releases/latest`);
+    const latest = release.tag_name.replace(/^v/, '');
+    const current = app.getVersion();
+    const hasUpdate = latest > current;
+    return {
+      hasUpdate,
+      latestVersion: latest,
+      currentVersion: current,
+      url: release.html_url,
+      name: release.name,
+    };
+  } catch {
+    return { hasUpdate: false, error: '检查更新失败' };
+  }
 });

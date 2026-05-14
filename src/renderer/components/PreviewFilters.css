@@ -1,0 +1,34 @@
+.ct-preview-filters {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.ct-preview-filter-input,
+.ct-preview-filter-select {
+  flex: 1;
+  padding: 8px 12px;
+  background: var(--app-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.ct-preview-filter-input:focus,
+.ct-preview-filter-select:focus {
+  border-color: var(--accent);
+}
+
+.ct-preview-filter-input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.ct-preview-filter-select option {
+  background: var(--app-bg);
+  color: var(--text-primary);
+}

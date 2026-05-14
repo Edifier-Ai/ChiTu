@@ -1,47 +1,6 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { CrawledItem, CrawlerConfig, CrawlerProgress, ExportFormat } from '../../shared/types';
-
-// Native throttle implementation — replaces lodash/throttle phantom dependency
-function throttle<T extends (...args: unknown[]) => void>(fn: T, delay: number): T & { flush: () => void; cancel: () => void } {
-  let timer: ReturnType<typeof setTimeout> | null = null;
-  let lastArgs: unknown[] | null = null;
-
-  const invoke = () => {
-    if (lastArgs !== null) {
-      fn(...lastArgs);
-      lastArgs = null;
-    }
-  };
-
-  const throttled = ((...args: unknown[]) => {
-    lastArgs = args;
-    if (timer === null) {
-      invoke();
-      timer = setTimeout(() => {
-        timer = null;
-        invoke();
-      }, delay);
-    }
-  }) as T & { flush: () => void; cancel: () => void };
-
-  throttled.flush = () => {
-    if (timer !== null) {
-      clearTimeout(timer);
-      timer = null;
-    }
-    invoke();
-  };
-
-  throttled.cancel = () => {
-    if (timer !== null) {
-      clearTimeout(timer);
-      timer = null;
-    }
-    lastArgs = null;
-  };
-
-  return throttled;
-}
+import { classifyError, FriendlyError } from '../../shared/errorMap';
 
 interface StartOptions extends CrawlerConfig {
   envReady: boolean;
@@ -53,23 +12,19 @@ interface ExportOptions {
   exportFormat: ExportFormat;
 }
 
-export function useCrawlerController() {
+interface UseCrawlerControllerOptions {
+  onComplete?: () => void;
+  onError?: () => void;
+}
+
+export function useCrawlerController(options?: UseCrawlerControllerOptions) {
   const [isCrawling, setIsCrawling] = useState(false);
   const [progress, setProgress] = useState<CrawlerProgress | null>(null);
   const [crawledData, setCrawledData] = useState<CrawledItem[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [friendlyError, setFriendlyError] = useState<FriendlyError | null>(null);
   const crawledDataRef = useRef<CrawledItem[]>([]);
-  const indexByKeyRef = useRef<Map<string, number>>(new Map());
   const errorRef = useRef<string | null>(null);
-
-  // Throttled data update — uses immutable copy to avoid stale closure issues
-  const throttledDataUpdate = useCallback(
-    throttle(() => {
-      // Create a fresh copy from the ref at the time of actual execution
-      setCrawledData([...crawledDataRef.current]);
-    }, 50),
-    []
-  );
 
   useEffect(() => {
     crawledDataRef.current = crawledData;
@@ -81,61 +36,48 @@ export function useCrawlerController() {
 
   useEffect(() => {
     const unsubProgress = window.electronAPI.onCrawlerProgress((data) => {
-      // 进度实时更新（无节流）
       setProgress(data);
-      
-      // 数据更新：使用新数组引用避免突变问题
-      let changed = false;
-      if (data.data && data.data.length > 0) {
-        const currentData = crawledDataRef.current;
-        const indexByKey = indexByKeyRef.current;
-        // Create a new array only when there are changes
-        const merged = [...currentData];
-        
-        for (const item of data.data) {
-          const key = `${item.platform}-${item.id}-${item.timestamp}`;
-          const existingIndex = indexByKey.get(key);
-          
-          if (existingIndex === undefined) {
-            indexByKey.set(key, merged.length);
-            merged.push(item);
-            changed = true;
-          } else {
+      if (data.data.length > 0) {
+        setCrawledData((prev) => {
+          const merged = [...prev];
+          const indexByKey = new Map(prev.map((item, index) => [`${item.platform}-${item.id}-${item.timestamp}`, index]));
+          for (const item of data.data) {
+            const key = `${item.platform}-${item.id}-${item.timestamp}`;
+            const existingIndex = indexByKey.get(key);
+            if (existingIndex == null) {
+              indexByKey.set(key, merged.length);
+              merged.push(item);
+              continue;
+            }
+
             const existing = merged[existingIndex];
             const existingCommentCount = existing.comments?.length || 0;
             const nextCommentCount = item.comments?.length || 0;
             if (nextCommentCount >= existingCommentCount) {
               merged[existingIndex] = item;
-              changed = true;
             }
           }
-        }
-
-        if (changed) {
-          crawledDataRef.current = merged;
-        }
-      }
-      
-      // 使用节流更新数据
-      if (changed) {
-        throttledDataUpdate();
+          return merged;
+        });
       }
     });
 
     const unsubError = window.electronAPI.onCrawlerError((message: string) => {
-      setError(message);
+      const friendly = classifyError(message);
+      setFriendlyError(friendly);
+      setError(friendly.userMessage);
       setIsCrawling(false);
-      throttledDataUpdate.flush();
+      options?.onError?.();
     });
 
     const unsubComplete = window.electronAPI.onCrawlerComplete((result) => {
+      if (result.taskType === 'account_identification') {
+        return;
+      }
       setIsCrawling(false);
       setProgress(null);
-      throttledDataUpdate.flush(); // Ensure any pending updates are committed
-      
-      // result.code is null if the process was killed by a signal (e.g. stopped manually)
-      const wasStoppedManually = result.code === null;
-      if (!wasStoppedManually && crawledDataRef.current.length === 0 && !errorRef.current) {
+      options?.onComplete?.();
+      if (crawledDataRef.current.length === 0 && !errorRef.current) {
         setError('本次采集已结束，但没有返回任何数据。请检查 Cookie、关键词筛选条件，或稍后重试。');
       }
     });
@@ -144,9 +86,8 @@ export function useCrawlerController() {
       unsubProgress();
       unsubError();
       unsubComplete();
-      throttledDataUpdate.cancel();
     };
-  }, [throttledDataUpdate]);
+  }, []);
 
   const startCrawler = async ({ envReady, missingCookiePlatforms, ...config }: StartOptions) => {
     if (!envReady) {
@@ -167,23 +108,25 @@ export function useCrawlerController() {
       return false;
     }
     if (missingCookiePlatforms.length > 0) {
-      setError(`以下平台缺少 Cookie：${missingCookiePlatforms.join('、')}。请先在右上角"账号设置"中保存登录态。`);
+      setError(`以下平台缺少 Cookie：${missingCookiePlatforms.join('、')}。请先在右上角“账号设置”中保存登录态。`);
       return false;
     }
 
     try {
       setError(null);
+      setFriendlyError(null);
       errorRef.current = null;
       setIsCrawling(true);
       setCrawledData([]);
       crawledDataRef.current = [];
-      indexByKeyRef.current.clear();
       setProgress(null);
       await window.electronAPI.startCrawler(config);
       return true;
     } catch (startError) {
-      const message = startError instanceof Error ? startError.message : '启动采集失败';
-      setError(message);
+      const raw = startError instanceof Error ? startError.message : '启动采集失败';
+      const friendly = classifyError(raw);
+      setFriendlyError(friendly);
+      setError(friendly.userMessage);
       setIsCrawling(false);
       return false;
     }
@@ -216,6 +159,8 @@ export function useCrawlerController() {
     crawledData,
     error,
     setError,
+    friendlyError,
+    setFriendlyError,
     startCrawler,
     stopCrawler,
     exportData,

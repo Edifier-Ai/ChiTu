@@ -7,6 +7,8 @@ const venvPython = path.join(rootDir, 'crawler', 'MediaCrawler', '.venv', 'bin',
 const pyInstaller = path.join(rootDir, 'crawler', 'MediaCrawler', '.venv', 'bin', 'pyinstaller');
 const distCrawlerDir = path.join(rootDir, 'dist_crawler');
 const bundledBrowsersDir = path.join(distCrawlerDir, 'ms-playwright');
+const localBrowsersCacheDir = path.join(process.env.HOME || '', 'Library', 'Caches', 'ms-playwright');
+const workPath = path.join(rootDir, 'build', 'crawler');
 
 function run(command, args, options = {}) {
   const result = spawnSync(command, args, {
@@ -27,9 +29,9 @@ if (!fs.existsSync(venvPython) || !fs.existsSync(pyInstaller)) {
 
 fs.rmSync(distCrawlerDir, { recursive: true, force: true });
 fs.mkdirSync(distCrawlerDir, { recursive: true });
+fs.rmSync(workPath, { recursive: true, force: true });
 
 run(pyInstaller, [
-  '--clean',
   '--noconfirm',
   '--distpath',
   'dist_crawler',
@@ -38,7 +40,21 @@ run(pyInstaller, [
   'crawler/crawler.spec',
 ]);
 
-// 始终在打包目录下全新安装所需的 chromium，避免将用户本地缓存的历史版本全部打包进去导致体积过大
+if (fs.existsSync(localBrowsersCacheDir)) {
+  fs.mkdirSync(bundledBrowsersDir, { recursive: true });
+  for (const entry of ['chromium-1124', 'ffmpeg-1009']) {
+    const source = path.join(localBrowsersCacheDir, entry);
+    if (!fs.existsSync(source)) {
+      continue;
+    }
+    fs.cpSync(source, path.join(bundledBrowsersDir, entry), {
+      recursive: true,
+      dereference: true,
+    });
+  }
+  process.exit(0);
+}
+
 const playwrightInstall = spawnSync(venvPython, ['-m', 'playwright', 'install', 'chromium'], {
   cwd: rootDir,
   stdio: 'inherit',

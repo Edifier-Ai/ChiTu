@@ -57,7 +57,7 @@ const KeywordInput: React.FC<KeywordInputProps> = ({
       emptyText: '未设置包含词，将不过滤正文中的包含条件',
       values: includeKeywords,
       onChange: onIncludeKeywordsChange,
-      toneClassName: 'include-tone',
+      toneClassName: 'ct-include-tone',
     },
     {
       key: 'exclude',
@@ -67,7 +67,7 @@ const KeywordInput: React.FC<KeywordInputProps> = ({
       emptyText: '未设置排除词，将不过滤正文中的排除条件',
       values: excludeKeywords,
       onChange: onExcludeKeywordsChange,
-      toneClassName: 'exclude-tone',
+      toneClassName: 'ct-exclude-tone',
     },
   ];
 
@@ -97,40 +97,40 @@ const KeywordInput: React.FC<KeywordInputProps> = ({
   };
 
   return (
-    <div className="keyword-input">
+    <div className="ct-keyword-input">
       {sections.map((section) => (
-        <div key={section.key} className={`keyword-section ${section.toneClassName || ''}`}>
-          <label className="label">
-            <span className="label-text">{section.title}</span>
-            <span className="label-hint">{section.hint}</span>
+        <div key={section.key} className={`ct-keyword-section ${section.toneClassName || ''}`}>
+          <label className="ct-label">
+            <span className="ct-label-text">{section.title}</span>
+            <span className="ct-label-hint">{section.hint}</span>
           </label>
-          <div className="input-wrapper">
+          <div className="ct-input-wrapper">
             <input
               type="text"
               value={inputValues[section.key]}
               onChange={(e) => setSectionInput(section.key, e.target.value)}
               onKeyDown={(e) => handleKeyPress(section, e)}
               placeholder={section.placeholder}
-              className="keyword-text-input"
+              className="ct-keyword-text-input"
               disabled={disabled}
             />
             <button
               onClick={() => handleAdd(section)}
               disabled={disabled || !inputValues[section.key].trim()}
-              className="add-btn"
+              className="ct-add-btn"
             >
               添加
             </button>
           </div>
           {section.values.length > 0 ? (
-            <div className="keyword-tags">
+            <div className="ct-keyword-ct-tags">
               {section.values.map((keyword) => (
-                <span key={`${section.key}-${keyword}`} className={`tag ${section.toneClassName || ''}`}>
+                <span key={`${section.key}-${keyword}`} className={`ct-tag ${section.toneClassName || ''}`}>
                   {keyword}
                   <button
                     onClick={() => handleRemove(section, keyword)}
                     disabled={disabled}
-                    className="remove-tag"
+                    className="ct-remove-ct-tag"
                   >
                     ×
                   </button>
@@ -138,7 +138,7 @@ const KeywordInput: React.FC<KeywordInputProps> = ({
               ))}
             </div>
           ) : (
-            <div className="empty-keywords">
+            <div className="ct-empty-keywords">
               <span>{section.emptyText}</span>
             </div>
           )}

@@ -1,0 +1,50 @@
+.ct-export-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--success-soft);
+  border: 1px solid rgba(34, 197, 94, 0.25);
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+
+.ct-export-path {
+  color: var(--text-primary);
+  font-size: 12px;
+  word-break: break-all;
+  flex: 1;
+}
+
+.ct-export-actions-btns {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.ct-export-btn {
+  padding: 6px 14px;
+  background: var(--success);
+  border: none;
+  border-radius: 6px;
+  color: white;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.ct-export-btn:hover {
+  opacity: 0.9;
+}
+
+.ct-export-btn.secondary {
+  background: transparent;
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+}
+
+.ct-export-btn.secondary:hover {
+  border-color: var(--text-primary);
+  color: var(--text-primary);
+}

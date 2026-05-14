@@ -1,0 +1,194 @@
+.ct-cookie-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.ct-cookie-modal {
+  background: var(--surface-raised);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  width: 640px;
+  max-width: calc(100vw - 40px);
+  max-height: calc(100vh - 80px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
+}
+
+.ct-cookie-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.ct-cookie-header h2 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.ct-cookie-close {
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 20px;
+  cursor: pointer;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+
+.ct-cookie-close:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.ct-cookie-desc {
+  margin: 0;
+  padding: 12px 24px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.ct-cookie-tabs {
+  display: flex;
+  gap: 8px;
+  padding: 0 24px 12px;
+}
+
+.ct-cookie-tab {
+  position: relative;
+  padding: 8px 16px;
+  border: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-secondary);
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.15s;
+}
+
+.ct-cookie-tab:hover {
+  border-color: var(--accent-soft);
+  color: var(--text-primary);
+}
+
+.ct-cookie-tab.ct-active {
+  background: var(--danger-soft);
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+
+.ct-cookie-tab.ct-has-cookie {
+  border-color: var(--success);
+}
+
+.ct-cookie-tab.ct-has-cookie.ct-active {
+  border-color: var(--accent);
+}
+
+.ct-tab-badge {
+  margin-left: 6px;
+  color: var(--success);
+  font-size: 11px;
+}
+
+.ct-cookie-content {
+  flex: 1;
+  padding: 0 24px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ct-cookie-hint {
+  padding: 10px 14px;
+  background: var(--info-soft);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  border-radius: 8px;
+  color: var(--info-text);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.ct-cookie-textarea {
+  flex: 1;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px;
+  background: var(--app-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  resize: vertical;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.ct-cookie-textarea:focus {
+  border-color: var(--accent-soft);
+}
+
+.ct-cookie-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 16px 24px;
+  border-top: 1px solid var(--border-color);
+}
+
+.ct-cookie-cancel {
+  padding: 10px 20px;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.15s;
+}
+
+.ct-cookie-cancel:hover {
+  border-color: var(--accent-soft);
+  color: var(--text-primary);
+}
+
+.ct-cookie-save {
+  padding: 10px 24px;
+  background: linear-gradient(135deg, var(--accent-strong) 0%, var(--accent) 100%);
+  border: none;
+  color: white;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.15s;
+  min-width: 110px;
+}
+
+.ct-cookie-save:hover:not(:disabled) {
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-strong) 100%);
+}
+
+.ct-cookie-save:disabled {
+  opacity: 0.7;
+  cursor: default;
+}

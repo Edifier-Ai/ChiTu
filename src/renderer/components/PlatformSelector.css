@@ -1,16 +1,16 @@
-.platform-selector {
+.ct-platform-selector {
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 
-.platform-grid {
+.ct-platform-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 12px;
 }
 
-.platform-card {
+.ct-platform-card {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -25,7 +25,7 @@
   overflow: hidden;
 }
 
-.platform-card::before {
+.ct-platform-card::before {
   content: '';
   position: absolute;
   top: 0;
@@ -37,47 +37,45 @@
   transition: opacity 0.2s;
 }
 
-.platform-card:hover:not(.disabled) {
+.ct-platform-card:hover:not(.ct-disabled) {
   border-color: var(--platform-color);
   transform: translateY(-2px);
 }
 
-.platform-card:hover:not(.disabled)::before {
+.ct-platform-card:hover:not(.ct-disabled)::before {
   opacity: 1;
 }
 
-.platform-card.selected {
+.ct-platform-card.ct-selected {
   border-color: var(--platform-color);
   background: color-mix(in srgb, var(--surface-raised) 78%, var(--platform-color) 22%);
 }
 
-.platform-card.selected::before {
+.ct-platform-card.ct-selected::before {
   opacity: 1;
 }
 
-.platform-card.disabled {
+.ct-platform-card.ct-disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
-.platform-card.disabled:hover {
+.ct-platform-card.ct-disabled:hover {
   transform: none;
   border-color: var(--border-color);
 }
 
-.platform-icon {
-  width: 32px;
-  height: 32px;
-  object-fit: contain;
+.ct-platform-icon {
+  font-size: 32px;
 }
 
-.platform-name {
+.ct-platform-name {
   color: var(--text-primary);
   font-size: 14px;
   font-weight: 500;
 }
 
-.check-mark {
+.ct-check-mark {
   position: absolute;
   top: 8px;
   right: 8px;

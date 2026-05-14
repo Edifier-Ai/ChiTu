@@ -1,5 +1,5 @@
 /* Header 组件样式 */
-.header {
+.ct-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -10,14 +10,14 @@
   backdrop-filter: blur(18px);
 }
 
-.header-content {
+.ct-header-content {
   display: flex;
   align-items: center;
   justify-content: space-between;
   width: 100%;
 }
 
-.logo {
+.ct-logo {
   display: flex;
   align-items: center;
   gap: 18px;
@@ -25,13 +25,13 @@
   -webkit-app-region: no-drag;
 }
 
-.logo-icon {
+.ct-logo-icon {
   font-size: 38px;
   filter: drop-shadow(0 0 12px rgba(239, 68, 68, 0.5));
   animation: logo-pulse 2s ease-in-out infinite;
 }
 
-.logo-icon-image {
+.ct-logo-icon-image {
   width: 62px;
   height: 62px;
   flex: 0 0 62px;
@@ -50,13 +50,13 @@
   50% { transform: scale(1.05); }
 }
 
-.logo-text {
+.ct-logo-text {
   display: flex;
   flex-direction: column;
   min-width: 0;
 }
 
-.logo-text h1 {
+.ct-logo-text h1 {
   margin: 0;
   font-size: 26px;
   font-weight: 700;
@@ -66,7 +66,7 @@
   letter-spacing: 3px;
 }
 
-.subtitle {
+.ct-subtitle {
   font-size: 12px;
   color: var(--text-secondary);
   margin-top: 2px;
@@ -74,14 +74,14 @@
   white-space: nowrap;
 }
 
-.header-info {
+.ct-header-info {
   display: flex;
   align-items: center;
   gap: 16px;
   -webkit-app-region: no-drag;
 }
 
-.status-badge {
+.ct-status-badge {
   padding: 7px 14px;
   border-radius: 999px;
   font-size: 12px;
@@ -89,19 +89,19 @@
   backdrop-filter: blur(12px);
 }
 
-.status-badge.ready {
+.ct-status-badge.ct-ready {
   background: rgba(7, 193, 96, 0.15);
   border: 1px solid rgba(7, 193, 96, 0.3);
   color: #07c160;
 }
 
-.status-badge.warning {
+.ct-status-badge.ct-warning {
   background: rgba(245, 158, 11, 0.14);
   border: 1px solid rgba(245, 158, 11, 0.3);
   color: #fbbf24;
 }
 
-.cookie-btn {
+.ct-cookie-btn {
   padding: 7px 14px;
   background: var(--surface-raised);
   border: 1px solid var(--border-color);
@@ -113,13 +113,13 @@
   -webkit-app-region: no-drag;
 }
 
-.cookie-btn:hover {
+.ct-cookie-btn:hover {
   border-color: var(--accent);
   color: var(--accent);
   background: var(--surface-hover);
 }
 
-.theme-btn {
+.ct-theme-btn {
   padding: 7px 14px;
   background: var(--surface-raised);
   border: 1px solid var(--border-color);
@@ -131,33 +131,33 @@
   -webkit-app-region: no-drag;
 }
 
-.theme-btn:hover {
+.ct-theme-btn:hover {
   border-color: var(--accent-soft);
   color: var(--text-primary);
   background: var(--surface-hover);
 }
 
 @media (max-width: 900px) {
-  .header {
+  .ct-header {
     padding: 14px 18px 14px 78px;
   }
 
-  .header-content {
+  .ct-header-content {
     gap: 14px;
     align-items: flex-start;
     flex-direction: column;
   }
 
-  .header-info {
+  .ct-header-info {
     flex-wrap: wrap;
   }
 
-  .subtitle {
+  .ct-subtitle {
     font-size: 11px;
     letter-spacing: 0.4px;
   }
 
-  .logo-icon-image {
+  .ct-logo-icon-image {
     width: 56px;
     height: 56px;
     flex-basis: 56px;

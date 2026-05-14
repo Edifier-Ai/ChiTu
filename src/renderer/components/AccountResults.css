@@ -1,0 +1,150 @@
+.ct-account-results {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--surface-muted);
+}
+
+.ct-account-empty {
+  align-items: center;
+  justify-content: center;
+}
+
+.ct-account-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.ct-account-empty-icon {
+  width: 44px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  color: var(--accent-soft);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.ct-account-empty-text {
+  color: var(--text-primary);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.ct-account-empty-hint {
+  max-width: 360px;
+  color: var(--text-tertiary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.ct-account-results-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.ct-account-results-title {
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.ct-account-results-count {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.ct-account-table-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.ct-account-table {
+  width: 100%;
+  min-width: 980px;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.ct-account-table th,
+.ct-account-table td {
+  padding: 11px 12px;
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  text-align: left;
+  vertical-align: top;
+}
+
+.ct-account-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.ct-account-table tr:hover td {
+  background: var(--surface-hover);
+}
+
+.ct-account-rank,
+.ct-account-name {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.ct-account-user-id {
+  max-width: 160px;
+  word-break: break-all;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.ct-account-evidence {
+  min-width: 240px;
+  line-height: 1.45;
+}
+
+.ct-confidence {
+  display: inline-flex;
+  align-items: center;
+  min-width: 56px;
+  justify-content: center;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.ct-confidence-高 {
+  color: #22c55e;
+  background: rgba(34, 197, 94, 0.14);
+}
+
+.ct-confidence-中 {
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.14);
+}
+
+.ct-confidence-低 {
+  color: #f87171;
+  background: rgba(248, 113, 113, 0.14);
+}

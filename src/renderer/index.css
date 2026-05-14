@@ -1,3 +1,11 @@
+/*
+  CSS Naming Convention
+  ---------------------
+  All component-level class names must use the `ct-` prefix to avoid
+  global namespace collisions. Example: `.ct-button` instead of `.button`.
+  App-level layout styles in App.css are exempt from this rule.
+*/
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -22,6 +30,10 @@ html {
   --danger-soft: rgba(239, 68, 68, 0.1);
   --danger-text: #fecaca;
   --panel-shadow: 0 18px 48px rgba(0, 0, 0, 0.28);
+  --success: #22c55e;
+  --success-text: #86efac;
+  --info-soft: rgba(59, 130, 246, 0.15);
+  --info-text: #93c5fd;
 }
 
 html[data-theme='light'] {
@@ -44,6 +56,10 @@ html[data-theme='light'] {
   --danger-soft: rgba(239, 68, 68, 0.1);
   --danger-text: #b91c1c;
   --panel-shadow: 0 16px 42px rgba(15, 23, 42, 0.08);
+  --success: #16a34a;
+  --success-text: #15803d;
+  --info-soft: rgba(59, 130, 246, 0.12);
+  --info-text: #2563eb;
 }
 
 body {

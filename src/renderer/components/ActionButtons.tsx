@@ -8,6 +8,9 @@ interface ActionButtonsProps {
   onExport: () => void;
   canExport: boolean;
   disableStart?: boolean;
+  startLabel?: string;
+  stopLabel?: string;
+  exportLabel?: string;
 }
 
 const ActionButtons: React.FC<ActionButtonsProps> = ({
@@ -17,27 +20,30 @@ const ActionButtons: React.FC<ActionButtonsProps> = ({
   onExport,
   canExport,
   disableStart,
+  startLabel = '开始爬取',
+  stopLabel = '停止爬取',
+  exportLabel = '导出数据',
 }) => {
   return (
-    <div className="action-buttons">
+    <div className="ct-action-buttons">
       {!isCrawling ? (
-        <button className="start-btn" onClick={onStart} disabled={disableStart}>
-          <span className="btn-icon">▶</span>
-          开始爬取
+        <button className="ct-start-btn" onClick={onStart} disabled={disableStart}>
+          <span className="ct-btn-icon">▶</span>
+          {startLabel}
         </button>
       ) : (
-        <button className="stop-btn" onClick={onStop}>
-          <span className="btn-icon">⏹</span>
-          停止爬取
+        <button className="ct-stop-btn" onClick={onStop}>
+          <span className="ct-btn-icon">⏹</span>
+          {stopLabel}
         </button>
       )}
       <button
-        className="export-btn"
+        className="ct-export-btn"
         onClick={onExport}
         disabled={!canExport || isCrawling}
       >
-        <span className="btn-icon">📥</span>
-        导出数据
+        <span className="ct-btn-icon">📥</span>
+        {exportLabel}
       </button>
     </div>
   );

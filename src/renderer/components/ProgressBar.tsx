@@ -5,47 +5,56 @@ import './ProgressBar.css';
 interface ProgressBarProps {
   progress: CrawlerProgress | null;
   isCrawling: boolean;
-  totalExpected: number;
   crawledCount: number;
+  activeLabel?: string;
+  doneLabel?: string;
+  countLabel?: string;
 }
 
 const ProgressBar: React.FC<ProgressBarProps> = ({
   progress,
   isCrawling,
-  totalExpected,
   crawledCount,
+  activeLabel = '正在爬取...',
+  doneLabel = '爬取完成',
+  countLabel = '已爬取',
 }) => {
-  const percentage = totalExpected > 0 ? Math.min(100, (crawledCount / totalExpected) * 100) : 0;
+  const hasPlatformProgress = progress && progress.total > 0;
+  const percentage = hasPlatformProgress
+    ? Math.min(100, (progress.current / progress.total) * 100)
+    : isCrawling
+      ? 0
+      : crawledCount > 0
+        ? 100
+        : 0;
 
   return (
-    <div className="progress-bar-container">
-      <div className="progress-header">
-        <span className="progress-title">
-          {isCrawling ? '正在爬取...' : progress ? '爬取完成' : '准备就绪'}
+    <div className="ct-progress-bar-container">
+      <div className="ct-progress-header">
+        <span className="ct-progress-title">
+          {isCrawling ? activeLabel : progress ? doneLabel : '准备就绪'}
         </span>
-        <span className="progress-stats">
-          已爬取 <span className="highlight">{crawledCount}</span> 条
-          {totalExpected > 0 && ` / 预计 ${totalExpected} 条`}
+        <span className="ct-progress-stats">
+          {isCrawling
+            ? `${countLabel} ${crawledCount} 条`
+            : crawledCount > 0
+              ? `共 ${crawledCount} 条`
+              : '等待开始'}
         </span>
       </div>
-      <div className="progress-track">
+      <div className="ct-progress-track">
         <div
-          className="progress-fill"
+          className="ct-progress-fill"
           style={{ width: `${percentage}%` }}
         />
       </div>
       {isCrawling && progress && (
-        <div className="progress-detail">
-          <span className="platform-tag">{progress.platform}</span>
-          <span className="keyword-tag">"{progress.keyword}"</span>
-          <span className="current-count">
+        <div className="ct-progress-detail">
+          <span className="ct-platform-tag">{progress.platform}</span>
+          <span className="ct-keyword-tag">"{progress.keyword}"</span>
+          <span className="ct-current-count">
             当前：{progress.current} / {progress.total}
           </span>
-          {progress.filtered !== undefined && progress.filtered > 0 && (
-            <span className="filter-info" title="被过滤的数量">
-              ⚠️ 过滤 {progress.filtered} 条
-            </span>
-          )}
         </div>
       )}
     </div>

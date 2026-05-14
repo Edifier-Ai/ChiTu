@@ -36,14 +36,14 @@ const CountSelector: React.FC<CountSelectorProps> = ({ value, onChange, disabled
   };
 
   return (
-    <div className="count-selector">
+    <div className="ct-count-selector">
       <label className="label">
         <span className="label-text">爬取数量</span>
         <span className="label-hint">每个平台的条数限制</span>
       </label>
 
       {showInput && !disabled ? (
-        <div className="custom-input-wrapper">
+        <div className="ct-custom-input-wrapper">
           <input
             type="number"
             value={customValue}
@@ -51,18 +51,18 @@ const CountSelector: React.FC<CountSelectorProps> = ({ value, onChange, disabled
             onBlur={handleCustomBlur}
             min={10}
             max={1000}
-            className="custom-count-input"
+            className="ct-custom-count-input"
             autoFocus
           />
-          <span className="range-hint">10 - 1000</span>
+          <span className="ct-range-hint">10 - 1000</span>
         </div>
       ) : (
         <>
-          <div className="preset-buttons">
+          <div className="ct-preset-buttons">
             {presetValues.map((preset) => (
               <button
                 key={preset}
-                className={`preset-btn ${value === preset ? 'active' : ''}`}
+                className={`ct-preset-btn ${value === preset ? 'ct-active' : ''}`}
                 onClick={() => handlePresetClick(preset)}
                 disabled={disabled}
               >
@@ -71,7 +71,7 @@ const CountSelector: React.FC<CountSelectorProps> = ({ value, onChange, disabled
             ))}
           </div>
           <button
-            className="custom-btn"
+            className="ct-custom-btn"
             onClick={() => setShowInput(true)}
             disabled={disabled}
           >
@@ -80,7 +80,7 @@ const CountSelector: React.FC<CountSelectorProps> = ({ value, onChange, disabled
         </>
       )}
 
-      <div className="slider-wrapper">
+      <div className="ct-slider-wrapper">
         <input
           type="range"
           min={10}
@@ -92,11 +92,11 @@ const CountSelector: React.FC<CountSelectorProps> = ({ value, onChange, disabled
             setCustomValue(e.target.value);
           }}
           disabled={disabled}
-          className="count-slider"
+          className="ct-count-slider"
         />
-        <div className="slider-value">
-          <span className="value">{value}</span>
-          <span className="unit">条</span>
+        <div className="ct-slider-value">
+          <span className="ct-value">{value}</span>
+          <span className="ct-unit">条</span>
         </div>
       </div>
     </div>

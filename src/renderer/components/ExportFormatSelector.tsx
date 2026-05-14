@@ -14,10 +14,10 @@ const ExportFormatSelector: React.FC<ExportFormatSelectorProps> = ({
   disabled = false,
 }) => {
   return (
-    <div className="export-format-selector">
-      <label className="format-label">导出格式</label>
-      <div className="format-options">
-        <label className={`format-option ${value === 'excel' ? 'active' : ''}`}>
+    <div className="ct-export-format-selector">
+      <label className="ct-format-label">导出格式</label>
+      <div className="ct-format-options">
+        <label className={`ct-format-option ${value === 'excel' ? 'ct-active' : ''}`}>
           <input
             type="radio"
             name="exportFormat"
@@ -26,9 +26,9 @@ const ExportFormatSelector: React.FC<ExportFormatSelectorProps> = ({
             onChange={(e) => onChange(e.target.value as ExportFormat)}
             disabled={disabled}
           />
-          <span className="format-name">Excel (.xlsx)</span>
+          <span className="ct-format-name">Excel (.xlsx)</span>
         </label>
-        <label className={`format-option ${value === 'csv' ? 'active' : ''}`}>
+        <label className={`ct-format-option ${value === 'csv' ? 'ct-active' : ''}`}>
           <input
             type="radio"
             name="exportFormat"
@@ -37,7 +37,7 @@ const ExportFormatSelector: React.FC<ExportFormatSelectorProps> = ({
             onChange={(e) => onChange(e.target.value as ExportFormat)}
             disabled={disabled}
           />
-          <span className="format-name">CSV</span>
+          <span className="ct-format-name">CSV</span>
         </label>
       </div>
     </div>

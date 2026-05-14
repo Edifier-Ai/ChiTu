@@ -1,0 +1,98 @@
+.ct-onboarding-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+
+.ct-onboarding-card {
+  background: var(--surface-raised);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  padding: 32px;
+  width: 420px;
+  max-width: calc(100vw - 40px);
+  box-shadow: var(--panel-shadow);
+}
+
+.ct-onboarding-step-indicator {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 24px;
+}
+
+.ct-onboarding-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--border-color);
+  transition: all 0.2s;
+}
+
+.ct-onboarding-dot.active {
+  background: var(--accent);
+  width: 24px;
+}
+
+.ct-onboarding-dot.completed {
+  background: var(--success);
+}
+
+.ct-onboarding-title {
+  color: var(--text-primary);
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0 0 12px;
+  text-align: center;
+}
+
+.ct-onboarding-desc {
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.6;
+  margin: 0 0 24px;
+  text-align: center;
+}
+
+.ct-onboarding-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ct-onboarding-skip {
+  padding: 10px 20px;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.ct-onboarding-skip:hover {
+  border-color: var(--text-primary);
+  color: var(--text-primary);
+}
+
+.ct-onboarding-next {
+  padding: 10px 24px;
+  background: linear-gradient(135deg, var(--accent-strong) 0%, var(--accent) 100%);
+  border: none;
+  border-radius: 8px;
+  color: white;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.ct-onboarding-next:hover {
+  opacity: 0.9;
+}

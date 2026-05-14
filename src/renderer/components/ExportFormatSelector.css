@@ -1,23 +1,23 @@
-.export-format-selector {
+.ct-export-format-selector {
   display: flex;
   align-items: center;
   gap: 12px;
   margin-bottom: 16px;
 }
 
-.format-label {
+.ct-format-label {
   font-size: 14px;
   color: var(--text-secondary);
   font-weight: 500;
   min-width: 70px;
 }
 
-.format-options {
+.ct-format-options {
   display: flex;
   gap: 16px;
 }
 
-.format-option {
+.ct-format-option {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -28,17 +28,17 @@
   border: 1px solid transparent;
 }
 
-.format-option:hover {
+.ct-format-option:hover {
   background: rgba(239, 68, 68, 0.1);
   border-color: rgba(239, 68, 68, 0.3);
 }
 
-.format-option.active {
+.ct-format-option.ct-active {
   background: rgba(239, 68, 68, 0.15);
   border-color: #ef4444;
 }
 
-.format-option input[type="radio"] {
+.ct-format-option input[type="radio"] {
   appearance: none;
   width: 16px;
   height: 16px;
@@ -50,11 +50,11 @@
   transition: all 0.2s ease;
 }
 
-.format-option input[type="radio"]:checked {
+.ct-format-option input[type="radio"]:checked {
   border-color: #ef4444;
 }
 
-.format-option input[type="radio"]:checked::after {
+.ct-format-option input[type="radio"]:checked::after {
   content: '';
   position: absolute;
   top: 50%;
@@ -66,17 +66,17 @@
   border-radius: 50%;
 }
 
-.format-option input[type="radio"]:disabled {
+.ct-format-option input[type="radio"]:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
-.format-option.active .format-name {
+.ct-format-option.ct-active .ct-format-name {
   color: #ef4444;
   font-weight: 500;
 }
 
-.format-name {
+.ct-format-name {
   font-size: 13px;
   color: var(--text-primary);
 }
