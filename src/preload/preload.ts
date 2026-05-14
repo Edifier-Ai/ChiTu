@@ -9,6 +9,7 @@ import {
   CrawlerProgress,
   ExportPayload,
   NotificationPayload,
+  PlatformId,
 } from '../shared/types';
 
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -42,6 +43,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   saveCookies: (cookies: Record<string, string>) => ipcRenderer.invoke('save-cookies', cookies),
   loadCookies: () => ipcRenderer.invoke('load-cookies'),
+  autoFetchCookie: (platform: PlatformId) => ipcRenderer.invoke('auto-fetch-cookie', platform),
   checkForUpdate: () => ipcRenderer.invoke('check-for-update'),
   getTaskHistory: () => ipcRenderer.invoke('get-task-history'),
   getSettings: () => ipcRenderer.invoke('get-settings'),

@@ -10,9 +10,6 @@ function formatFollowers(item: EmployeeAccountResult) {
   if (item.followersCount == null) {
     return item.followersText || '未知';
   }
-  if (item.followersCount >= 10000) {
-    return `${(item.followersCount / 10000).toFixed(1)}万`;
-  }
   return String(item.followersCount);
 }
 

@@ -135,6 +135,13 @@ export interface SaveCookiesResult {
   error?: string;
 }
 
+export interface AutoFetchCookieResult {
+  success: boolean;
+  platform: PlatformId;
+  cookie?: string;
+  error?: string;
+}
+
 export interface UpdateCheckResult {
   hasUpdate: boolean;
   latestVersion?: string;
@@ -237,6 +244,7 @@ export interface ElectronAPI {
   onCrawlerComplete: (callback: (result: BridgeCompleteMessage['payload']) => void) => () => void;
   saveCookies: (cookies: Record<string, string>) => Promise<SaveCookiesResult>;
   loadCookies: () => Promise<Record<string, string>>;
+  autoFetchCookie: (platform: PlatformId) => Promise<AutoFetchCookieResult>;
   checkForUpdate: () => Promise<UpdateCheckResult>;
   getTaskHistory: () => Promise<TaskHistoryRecord[]>;
   getSettings: () => Promise<SettingsResult>;

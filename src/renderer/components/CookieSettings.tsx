@@ -60,6 +60,8 @@ const CookieSettings: React.FC<CookieSettingsProps> = ({ visible, onClose, onSav
   const [saved, setSaved] = useState(false);
   const [activeTab, setActiveTab] = useState<PlatformId>('xiaohongshu');
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [autoFetching, setAutoFetching] = useState<PlatformId | null>(null);
+  const [autoFetchMessage, setAutoFetchMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (visible) {
@@ -67,8 +69,33 @@ const CookieSettings: React.FC<CookieSettingsProps> = ({ visible, onClose, onSav
         setCookies(loaded || {});
       });
       setValidationError(null);
+      setAutoFetchMessage(null);
     }
   }, [visible]);
+
+  const handleAutoFetch = async (platform: PlatformId) => {
+    setActiveTab(platform);
+    setAutoFetching(platform);
+    setValidationError(null);
+    setAutoFetchMessage(`正在打开${PLATFORM_NAME_MAP[platform]}登录窗口...`);
+
+    try {
+      const result = await window.electronAPI.autoFetchCookie(platform);
+      if (!result.success || !result.cookie) {
+        setAutoFetchMessage(result.error || `${PLATFORM_NAME_MAP[platform]} Cookie 自动获取失败`);
+        return;
+      }
+
+      setCookies((prev) => ({ ...prev, [platform]: result.cookie || '' }));
+      setAutoFetchMessage(`${PLATFORM_NAME_MAP[platform]} Cookie 已自动保存`);
+      onSaved?.();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : `${PLATFORM_NAME_MAP[platform]} Cookie 自动获取失败`;
+      setAutoFetchMessage(message);
+    } finally {
+      setAutoFetching(null);
+    }
+  };
 
   const handleSave = async () => {
     // 前端校验各平台 Cookie
@@ -141,6 +168,23 @@ const CookieSettings: React.FC<CookieSettingsProps> = ({ visible, onClose, onSav
             <div className="ct-cookie-hint">
               💡 {activePlatform.hint}
             </div>
+            <div className="ct-cookie-auto-row">
+              <button
+                className="ct-cookie-auto"
+                onClick={() => handleAutoFetch(activeTab)}
+                disabled={Boolean(autoFetching)}
+              >
+                {autoFetching === activeTab ? '等待登录中...' : `自动获取 ${activePlatform.name} Cookie`}
+              </button>
+              <span className="ct-cookie-auto-note">
+                会打开登录窗口，登录成功后自动保存到本机。
+              </span>
+            </div>
+            {autoFetchMessage && (
+              <div className={`ct-cookie-message ${autoFetchMessage.includes('已自动保存') ? 'ct-success' : ''}`}>
+                {autoFetchMessage}
+              </div>
+            )}
             <textarea
               className="ct-cookie-textarea"
               placeholder={`粘贴 ${activePlatform.name} 的 Cookie 字符串...`}

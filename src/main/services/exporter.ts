@@ -80,7 +80,7 @@ function toAccountCellValue(item: EmployeeAccountResult, key: AccountExportHeade
   if (key === 'suspected_employee_name') return item.suspectedEmployeeName;
   if (key === 'user_id') return item.userId;
   if (key === 'followers_count') return item.followersCount == null ? '' : String(item.followersCount);
-  if (key === 'followers_text') return item.followersText;
+  if (key === 'followers_text') return item.followersCount == null ? item.followersText : String(item.followersCount);
   if (key === 'confidence_level') return item.confidenceLevel;
   if (key === 'confidence_score') return String(item.confidenceScore);
   if (key === 'profile_url') return item.profileUrl;
@@ -93,6 +93,14 @@ function toAccountCellValue(item: EmployeeAccountResult, key: AccountExportHeade
   if (key === 'raw_verified_reason') return item.rawVerifiedReason || '';
   if (key === 'rank') return String(item.rank);
   return '';
+}
+
+function isNumericAccountHeader(key: AccountExportHeader) {
+  return key === 'rank' || key === 'followers_count' || key === 'followers_text' || key === 'confidence_score' || key === 'matched_post_count';
+}
+
+function isNumericCellValue(value: string) {
+  return /^-?\d+(?:\.\d+)?$/.test(value);
 }
 
 export function escapeCsv(value: string) {
@@ -137,7 +145,10 @@ function createSheetXml(data: CrawledItem[]) {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
   <sheetViews>
-    <sheetView workbookViewId="0"/>
+    <sheetView workbookViewId="0">
+      <pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/>
+      <selection pane="bottomLeft" activeCell="A2" sqref="A2"/>
+    </sheetView>
   </sheetViews>
   <sheetFormatPr defaultRowHeight="18"/>
   <sheetData>${rowXml}</sheetData>
@@ -155,6 +166,10 @@ function createAccountSheetXml(data: EmployeeAccountResult[]) {
       const cells = row
         .map((value, cellIndex) => {
           const ref = `${toColumnName(cellIndex)}${rowIndex + 1}`;
+          const key = ACCOUNT_EXPORT_HEADERS[cellIndex];
+          if (rowIndex > 0 && isNumericAccountHeader(key) && isNumericCellValue(value)) {
+            return `<c r="${ref}"><v>${escapeXml(value)}</v></c>`;
+          }
           return `<c r="${ref}" t="inlineStr"><is><t xml:space="preserve">${escapeXml(value)}</t></is></c>`;
         })
         .join('');
@@ -165,10 +180,32 @@ function createAccountSheetXml(data: EmployeeAccountResult[]) {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
   <sheetViews>
-    <sheetView workbookViewId="0"/>
+    <sheetView workbookViewId="0">
+      <pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/>
+      <selection pane="bottomLeft" activeCell="A2" sqref="A2"/>
+    </sheetView>
   </sheetViews>
   <sheetFormatPr defaultRowHeight="18"/>
+  <cols>
+    <col min="1" max="1" width="8" customWidth="1"/>
+    <col min="2" max="2" width="12" customWidth="1"/>
+    <col min="3" max="3" width="24" customWidth="1"/>
+    <col min="4" max="4" width="18" customWidth="1"/>
+    <col min="5" max="5" width="28" customWidth="1"/>
+    <col min="6" max="7" width="14" customWidth="1"/>
+    <col min="8" max="8" width="10" customWidth="1"/>
+    <col min="9" max="9" width="14" customWidth="1"/>
+    <col min="10" max="10" width="40" customWidth="1"/>
+    <col min="11" max="11" width="46" customWidth="1"/>
+    <col min="12" max="12" width="16" customWidth="1"/>
+    <col min="13" max="13" width="20" customWidth="1"/>
+    <col min="14" max="14" width="24" customWidth="1"/>
+    <col min="15" max="15" width="22" customWidth="1"/>
+    <col min="16" max="16" width="36" customWidth="1"/>
+    <col min="17" max="17" width="28" customWidth="1"/>
+  </cols>
   <sheetData>${rowXml}</sheetData>
+  <autoFilter ref="A1:Q${rows.length}"/>
 </worksheet>`;
 }
 

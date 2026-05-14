@@ -73,6 +73,22 @@ def load_cookies() -> Dict[str, str]:
         return {}
 
 
+def save_platform_cookie(platform_id: str, cookie_str: str) -> None:
+    if not cookie_str.strip():
+        return
+    cookies = load_cookies()
+    cookies[platform_id] = cookie_str
+    try:
+        Path(COOKIES_FILE).parent.mkdir(parents=True, exist_ok=True)
+        with open(COOKIES_FILE, "w", encoding="utf-8") as f:
+            json.dump(cookies, f, ensure_ascii=False, indent=2)
+    except Exception as exc:
+        emit_message("log", {
+            "stream": "stderr",
+            "message": f"保存{PLATFORM_NAMES.get(platform_id, platform_id)} Cookie 失败：{exc}",
+        })
+
+
 def parse_cookie_string(cookie_str: str) -> Dict[str, str]:
     cookie_dict: Dict[str, str] = {}
     for cookie in cookie_str.split(";"):
@@ -157,6 +173,32 @@ def build_browser_cookies(platform_id: str, cookie_str: str) -> List[Dict[str, A
     return cookies
 
 
+async def serialize_context_cookies(context: "BrowserContext", platform_id: str) -> str:
+    domain_terms = {
+        "xiaohongshu": ("xiaohongshu.com",),
+        "douyin": ("douyin.com",),
+        "weibo": ("weibo.com", "m.weibo.cn"),
+        "bilibili": ("bilibili.com",),
+    }.get(platform_id, ())
+    try:
+        raw_cookies = await context.cookies()
+    except Exception:
+        return ""
+
+    deduped: Dict[str, str] = {}
+    for cookie in raw_cookies:
+        name = str(cookie.get("name") or "")
+        value = str(cookie.get("value") or "")
+        domain = str(cookie.get("domain") or "")
+        if not name or not value:
+            continue
+        if domain_terms and not any(term in domain for term in domain_terms):
+            continue
+        deduped[name] = value
+
+    return "; ".join(f"{name}={value}" for name, value in sorted(deduped.items()))
+
+
 async def wait_for_visible_results(page: "Page", selectors: List[str], timeout_seconds: float = 120.0) -> bool:
     deadline = asyncio.get_event_loop().time() + timeout_seconds
     selector_expr = ", ".join(selectors)
@@ -224,6 +266,31 @@ async def safe_page_content(page: "Page", retries: int = 3) -> str:
     if last_error:
         raise last_error
     return ""
+
+
+async def scroll_search_results(page: "Page", target_count: int, selector: str, max_rounds: int = 10) -> None:
+    previous_count = -1
+    stable_rounds = 0
+    rounds = max(2, min(max_rounds, max(4, target_count // 10)))
+    for _ in range(rounds):
+        try:
+            current_count = await page.locator(selector).count()
+        except Exception:
+            current_count = 0
+        if current_count >= target_count:
+            break
+        if current_count == previous_count:
+            stable_rounds += 1
+        else:
+            stable_rounds = 0
+        if stable_rounds >= 3:
+            break
+        previous_count = current_count
+        try:
+            await page.mouse.wheel(0, 1600)
+        except Exception:
+            pass
+        await asyncio.sleep(1.2)
 
 
 async def scrape_xhs_comments(page: "Page", max_comments: int = 5) -> List[Dict[str, str]]:
@@ -794,6 +861,7 @@ async def run_douyin_browser_fallback(
 ) -> List[Dict]:
     from playwright.async_api import async_playwright
     results: List[Dict] = []
+    account_mode = not terminal_error_on_verification
 
     async def has_douyin_verification(page: "Page") -> bool:
         try:
@@ -819,7 +887,12 @@ async def run_douyin_browser_fallback(
 
     async def wait_for_douyin_access(page: "Page", timeout_seconds: float = 180.0) -> bool:
         deadline = asyncio.get_event_loop().time() + timeout_seconds
-        result_selectors = ['[data-e2e="search-card-video"]', '[class*="search-card"]', 'a[href*="/video/"]']
+        result_selectors = [
+            '[data-e2e="search-card-video"]',
+            '[class*="search-card"]',
+            'a[href*="/video/"]',
+            'a[href*="/user/"]',
+        ]
         while asyncio.get_event_loop().time() < deadline:
             if await has_douyin_verification(page):
                 await asyncio.sleep(2)
@@ -831,6 +904,226 @@ async def run_douyin_browser_fallback(
                 pass
             await asyncio.sleep(2)
         return False
+
+    async def persist_current_douyin_cookie(context: "BrowserContext") -> None:
+        refreshed_cookie = await serialize_context_cookies(context, "douyin")
+        if refreshed_cookie and parse_cookie_string(refreshed_cookie).get("sessionid"):
+            save_platform_cookie("douyin", refreshed_cookie)
+            emit_message("log", {
+                "stream": "stderr",
+                "message": "已保存本次验证后的抖音 Cookie，下次会复用当前登录态。",
+            })
+
+    async def extract_visible_douyin_cards(page: "Page") -> List[Dict]:
+        return await safe_page_evaluate(
+            page,
+            """(options) => {
+                const accountMode = Boolean(options?.accountMode);
+                const result = [];
+                const seen = new Set();
+                const verificationTerms = [
+                  '手机号验证', '短信验证', '安全验证', '验证身份',
+                  '请输入手机号', '获取验证码', '拖动滑块', '请完成验证',
+                  '为保护账号安全', '认证徽章', '已认证', '官方认证',
+                  '企业认证', '蓝V认证', '蓝V'
+                ];
+                const normalize = (text) => (text || '').replace(/\\s+/g, ' ').trim();
+                const bodyText = normalize(document.body?.innerText || '');
+                if (verificationTerms.some((term) => bodyText.includes(term))) {
+                    return [];
+                }
+                const cleanHref = (href) => {
+                    try {
+                        const url = new URL(href, location.origin);
+                        url.search = '';
+                        url.hash = '';
+                        return url.href;
+                    } catch (_) {
+                        return href || '';
+                    }
+                };
+                const profileIdFromUrl = (href) => {
+                    const match = (href || '').match(/\\/user\\/([^/?#]+)/);
+                    return match ? decodeURIComponent(match[1]) : '';
+                };
+                const isValidProfile = (href) => {
+                    const userId = profileIdFromUrl(href);
+                    if (!userId || userId === 'self') return false;
+                    try {
+                        const url = new URL(href, location.origin);
+                        return /^\\/user\\/[^/?#]+/.test(url.pathname);
+                    } catch (_) {
+                        return /\\/user\\/[^/?#]+/.test(href || '');
+                    }
+                };
+                const chooseRoot = (start) => {
+                    let current = start;
+                    let best = start;
+                    for (let depth = 0; current && depth < 9; depth += 1) {
+                        const tag = current.tagName || '';
+                        if (tag === 'BODY' || tag === 'HTML') break;
+                        const text = normalize(current.innerText || current.textContent || '');
+                        const rect = current.getBoundingClientRect?.();
+                        const usefulSize = !rect || (
+                            rect.width >= 80 &&
+                            rect.height >= 20 &&
+                            rect.width <= 1280 &&
+                            rect.height <= 760
+                        );
+                        const hasProfile = Boolean(current.querySelector?.('a[href*="/user/"]'));
+                        const hasVideo = Boolean(current.querySelector?.('a[href*="/video/"]'));
+                        const hasUserSignal = /粉丝|关注|获赞|作品|抖音号|简介/.test(text);
+                        if (usefulSize && text.length >= 2 && text.length <= 1200 && (hasUserSignal || hasVideo || hasProfile || depth <= 2)) {
+                            best = current;
+                        }
+                        if (tag === 'MAIN') break;
+                        current = current.parentElement;
+                    }
+                    return best;
+                };
+                const pickText = (root, selectors) => {
+                    for (const selector of selectors) {
+                        const node = root.querySelector(selector);
+                        const text = normalize(node?.innerText || node?.textContent || node?.getAttribute?.('aria-label') || node?.getAttribute?.('title') || '');
+                        if (text) return text;
+                    }
+                    return '';
+                };
+                const textWithoutCounters = (text) => normalize(
+                    (text || '')
+                      .replace(/\\d+(?:\\.\\d+)?\\s*(?:亿|万|w|W|千|k|K)?\\s*(?:粉丝|获赞|点赞|关注|作品)/g, ' ')
+                      .replace(/(?:粉丝|获赞|点赞|关注|作品)/g, ' ')
+                );
+                const badName = (text) => {
+                    const value = normalize(text);
+                    if (!value || value.length > 40) return true;
+                    if (verificationTerms.some((term) => value.includes(term))) return true;
+                    if (/^(关注|已关注|粉丝|获赞|点赞|作品|首页|朋友|消息|我的|我|登录|推荐|综合|视频|用户|直播|地点|头像|搜索|认证徽章|已认证|官方认证|企业认证|蓝V认证|蓝V)$/.test(value)) return true;
+                    if (/^\\d/.test(value) && /(粉丝|关注|获赞|作品|点赞)/.test(value)) return true;
+                    return false;
+                };
+                const splitLines = (text) => (text || '')
+                    .split(/[\\n\\r]+/)
+                    .map(normalize)
+                    .filter(Boolean);
+                const pickAuthor = (root, anchor) => {
+                    const anchorText = textWithoutCounters(anchor?.innerText || anchor?.textContent || anchor?.getAttribute?.('aria-label') || anchor?.getAttribute?.('title') || '');
+                    const anchorParts = anchorText.split(/[｜|·•]/).map(normalize).filter(Boolean);
+                    const fromAnchor = anchorParts.find((line) => !badName(line));
+                    if (fromAnchor) return fromAnchor;
+                    const selectorText = textWithoutCounters(pickText(root, [
+                      '[data-e2e*="user"]',
+                      '[data-e2e*="author"]',
+                      '[data-e2e*="nickname"]',
+                      '[class*="author"]',
+                      '[class*="Author"]',
+                      '[class*="nickname"]',
+                      '[class*="Nickname"]',
+                      '[class*="name"]',
+                      '[class*="Name"]'
+                    ]));
+                    const fromSelector = selectorText.split(/[｜|·•]/).map(normalize).find((line) => !badName(line));
+                    if (fromSelector) return fromSelector;
+                    return splitLines(root.innerText || root.textContent || '').find((line) => !badName(textWithoutCounters(line))) || '';
+                };
+                const extractFollowers = (text) => {
+                    const patterns = [
+                        /粉丝\\s*[:：]?\\s*(\\d+(?:\\.\\d+)?\\s*(?:亿|万|w|W|千|k|K)?)/,
+                        /(\\d+(?:\\.\\d+)?\\s*(?:亿|万|w|W|千|k|K)?)\\s*粉丝/
+                    ];
+                    for (const pattern of patterns) {
+                        const match = (text || '').match(pattern);
+                        if (match) return `${normalize(match[1])}粉丝`;
+                    }
+                    return '';
+                };
+                const extractBio = (root, author) => {
+                    const picked = pickText(root, [
+                      '[data-e2e*="user-desc"]',
+                      '[class*="signature"]',
+                      '[class*="Signature"]',
+                      '[class*="desc"]',
+                      '[class*="Desc"]',
+                      '[class*="bio"]',
+                      '[class*="Bio"]'
+                    ]);
+                    if (picked && !verificationTerms.some((term) => picked.includes(term))) {
+                        return picked.slice(0, 180);
+                    }
+                    const lines = splitLines(root.innerText || root.textContent || '');
+                    const bio = lines.find((line) => {
+                        const clean = normalize(line);
+                        if (clean === author || badName(clean)) return false;
+                        if (/粉丝|获赞|关注|作品|抖音号/.test(clean)) return false;
+                        return clean.length >= 4 && clean.length <= 180;
+                    });
+                    return bio || '';
+                };
+                const push = (item) => {
+                    const profileUrl = cleanHref(item.profileUrl || '');
+                    const href = cleanHref(item.href || '');
+                    const userId = item.userId || profileIdFromUrl(profileUrl);
+                    if (accountMode && !isValidProfile(profileUrl)) return;
+                    if (accountMode && badName(item.author || '')) return;
+                    const key = profileUrl || userId || href;
+                    if (!key || seen.has(key)) return;
+                    seen.add(key);
+                    result.push({ ...item, href, profileUrl, userId });
+                };
+
+                for (const anchor of Array.from(document.querySelectorAll('a[href*="/user/"]'))) {
+                    const profileUrl = cleanHref(anchor.href || anchor.getAttribute('href') || '');
+                    if (!isValidProfile(profileUrl)) continue;
+                    const root = chooseRoot(anchor);
+                    const rootText = normalize(root.innerText || root.textContent || '');
+                    if (!rootText || verificationTerms.some((term) => rootText.includes(term))) continue;
+                    const author = pickAuthor(root, anchor);
+                    const followers = extractFollowers(rootText);
+                    const bio = extractBio(root, author);
+                    const videoLink = root.querySelector('a[href*="/video/"]');
+                    const href = cleanHref(videoLink?.href || '');
+                    push({
+                        href,
+                        title: bio || rootText,
+                        content: bio || rootText,
+                        author,
+                        profileUrl,
+                        userId: profileIdFromUrl(profileUrl),
+                        followers,
+                        rawBio: bio,
+                    });
+                }
+
+                if (!accountMode) {
+                    for (const link of Array.from(document.querySelectorAll('a[href*="/video/"]'))) {
+                        const href = cleanHref(link.href || link.getAttribute('href') || '');
+                        if (!href) continue;
+                        const root = chooseRoot(link);
+                        const profileLink = root.querySelector('a[href*="/user/"]');
+                        const profileUrl = cleanHref(profileLink?.href || '');
+                        const rawText = normalize(root.innerText || root.textContent || '');
+                        const title = pickText(root, [
+                          '[data-e2e*="title"]',
+                          '[class*="title"]',
+                          '[class*="Title"]',
+                          '[class*="desc"]',
+                          '[class*="Desc"]'
+                        ]);
+                        const author = pickAuthor(root, profileLink);
+                        push({
+                            href,
+                            title,
+                            content: title || rawText || href,
+                            author: author || '未知',
+                            profileUrl,
+                            userId: profileIdFromUrl(profileUrl),
+                        });
+                    }
+                }
+                return result;
+            }""",
+            {"accountMode": account_mode},
+        ) or []
 
     user_data_dir = os.path.expanduser("~/.chitu/browser/douyin")
     Path(user_data_dir).mkdir(parents=True, exist_ok=True)
@@ -844,62 +1137,53 @@ async def run_douyin_browser_fallback(
             if cookies:
                 await context.add_cookies(cookies)
         page = context.pages[0] if context.pages else await context.new_page()
-        search_url = f"https://www.douyin.com/search/{quote(keyword)}?type=video"
-        if not await safe_page_goto(page, search_url):
-            output_error("抖音搜索页加载超时，请检查网络或平台风控状态后重试。")
-            await context.close()
-            return []
-        await asyncio.sleep(3)
-        if await has_douyin_verification(page):
+        search_types = ["user", "general"] if account_mode else ["video"]
+        cards: List[Dict] = []
+        for search_type in search_types:
+            search_url = f"https://www.douyin.com/search/{quote(keyword)}?type={search_type}"
+            if not await safe_page_goto(page, search_url):
+                continue
+            await asyncio.sleep(3)
+            if await has_douyin_verification(page):
+                emit_message("log", {
+                    "stream": "stderr",
+                    "message": "抖音触发手机号/安全验证，已打开持久化浏览器等待人工处理；完成验证后请保持窗口打开，程序会继续检测。"
+                })
+            if not await wait_for_douyin_access(page):
+                continue
+
+            await persist_current_douyin_cookie(context)
+            await scroll_search_results(page, count, 'a[href*="/user/"], a[href*="/video/"]', max_rounds=16)
+            cards = await extract_visible_douyin_cards(page)
             emit_message("log", {
                 "stream": "stderr",
-                "message": "抖音触发手机号/安全验证，已打开持久化浏览器等待人工处理。"
+                "message": f"抖音关键词「{keyword}」{search_type} 搜索页解析到 {len(cards or [])} 条有效线索。",
             })
-        if not await wait_for_douyin_access(page):
-            message = "抖音触发手机号验证，当前账号或浏览器环境暂时无法自动采集。请在打开的抖音浏览器中完成验证后重试；若仍反复弹出，请先取消勾选抖音，用小红书/微博继续识别。"
+            if cards:
+                break
+
+        if not cards:
+            await persist_current_douyin_cookie(context)
+            message = "抖音当前页面没有解析到有效账号线索，可能是平台验证页、搜索页结构变化或该关键词暂无用户结果。"
             if terminal_error_on_verification:
                 output_error(message)
             else:
                 emit_message("log", {"stream": "stderr", "message": message})
-            await context.close()
-            if not terminal_error_on_verification:
-                raise DouyinVerificationRequired(message)
-            return []
 
-        cards = await safe_page_evaluate(
-            page,
-            """() => {
-                const nodes = Array.from(document.querySelectorAll('[data-e2e="search-card-video"], [class*="search-card"], [class*="card"]'));
-                const result = [];
-                const seen = new Set();
-                for (const node of nodes) {
-                    const link = node.querySelector('a[href*="/video/"]');
-                    const href = link?.href || '';
-                    if (!href || seen.has(href)) continue;
-                    seen.add(href);
-                    const title = (node.querySelector('[class*="title"]')?.textContent || '').trim();
-                    const desc = (node.querySelector('[class*="desc"]')?.textContent || '').trim();
-                    const author = (node.querySelector('[class*="author"]')?.textContent || '').trim();
-                    const profileLink = node.querySelector('a[href*="/user/"]');
-                    const profileUrl = profileLink?.href || '';
-                    const userId = (profileUrl.match(/\\/user\\/([^/?#]+)/) || [])[1] || '';
-                    if (!title && !desc) continue;
-                    result.push({ href, title, content: desc || title, author, profileUrl, userId });
-                }
-                return result;
-            }""",
-        )
         for card in (cards or [])[:count]:
+            item_id = card.get("href", "").split("/video/")[-1].split("?")[0] if card.get("href") else ""
             results.append({
-                "id": card.get("href", "").split("/video/")[-1].split("?")[0] or "",
+                "id": item_id or card.get("userId", "") or card.get("profileUrl", ""),
                 "platform": PLATFORM_NAMES["douyin"],
                 "keyword": keyword,
                 "content": card.get("content") or card.get("title") or "",
                 "author": card.get("author") or "未知",
                 "timestamp": "",
-                "url": card.get("href", ""),
+                "url": card.get("href") or card.get("profileUrl", ""),
                 "profile_url": card.get("profileUrl", ""),
                 "user_id": card.get("userId", ""),
+                "followers": card.get("followers") or "",
+                "raw_bio": card.get("rawBio") or "",
                 "comments": [],
             })
         await context.close()
@@ -1374,6 +1658,20 @@ EMPLOYEE_SIGNAL_TERMS = [
     "产品经理", "研发", "工程师", "设计", "运营", "市场", "售后", "门店", "导购", "销售",
     "办公室", "园区", "食堂", "团建", "公司", "老板",
 ]
+DOUYIN_VERIFICATION_TERMS = [
+    "手机号验证", "短信验证", "安全验证", "验证身份", "请输入手机号", "获取验证码",
+    "拖动滑块", "请完成验证", "为保护账号安全",
+]
+INVALID_ACCOUNT_NAMES = {
+    "", "未知", "我的", "我", "登录", "关注", "已关注", "粉丝", "获赞", "作品", "头像",
+    "认证徽章", "已认证", "官方认证", "企业认证", "蓝V认证", "蓝V",
+}
+EMPLOYEE_NAME_BLOCK_TERMS = {
+    "员工", "同事", "入职", "在职", "上班", "招聘", "内推", "产品经理", "研发", "售后",
+    "账号", "官方", "粉丝", "僵尸", "公司", "科技", "旗舰店", "专卖店",
+    "认证", "徽章", "蓝V",
+}
+OFFICIAL_ACCOUNT_TERMS = {"官方旗舰店", "旗舰店", "专卖店", "官方账号", "官方直播间", "企业号", "客服"}
 
 
 def parse_count_text(value: Any) -> Tuple[Optional[int], str]:
@@ -1381,16 +1679,151 @@ def parse_count_text(value: Any) -> Tuple[Optional[int], str]:
     if not text:
         return None, "未知"
     normalized = text.replace(",", "").replace("，", "")
-    match = re.search(r"(\d+(?:\.\d+)?)\s*([万wW千kK]?)", normalized)
+    match = re.search(r"(\d+(?:\.\d+)?)\s*([亿万wW千kK]?)", normalized)
     if not match:
         return None, text
     number = float(match.group(1))
     unit = match.group(2).lower()
-    if unit in ("万", "w"):
+    if unit == "亿":
+        number *= 100000000
+    elif unit in ("万", "w"):
         number *= 10000
     elif unit in ("千", "k"):
         number *= 1000
     return int(number), text
+
+
+def contains_douyin_verification_text(*values: Any) -> bool:
+    text = " ".join(str(value or "") for value in values)
+    return any(term in text for term in DOUYIN_VERIFICATION_TERMS)
+
+
+def is_valid_douyin_profile(profile_url: str, user_id: str = "") -> bool:
+    raw_profile = str(profile_url or "").strip()
+    raw_user_id = str(user_id or "").strip()
+    if raw_user_id == "self":
+        return False
+    if raw_profile:
+        match = re.search(r"/user/([^/?#]+)", raw_profile)
+        if not match:
+            return False
+        return match.group(1) != "self"
+    return bool(raw_user_id and raw_user_id != "self")
+
+
+def is_invalid_account_post(platform_id: str, post: Dict) -> bool:
+    account_name = str(post.get("author") or "").strip()
+    profile_url = str(post.get("profile_url") or post.get("profileUrl") or "").strip()
+    user_id = str(post.get("user_id") or post.get("userId") or post.get("sec_uid") or "").strip()
+    content = str(post.get("content") or "")
+    raw_bio = str(post.get("raw_bio") or post.get("bio") or "")
+    combined = " ".join([account_name, content, raw_bio])
+
+    if contains_douyin_verification_text(content, raw_bio, account_name):
+        return True
+
+    if platform_id == "douyin":
+        if account_name in INVALID_ACCOUNT_NAMES:
+            return True
+        if not is_valid_douyin_profile(profile_url, user_id):
+            return True
+        if any(term in combined for term in OFFICIAL_ACCOUNT_TERMS):
+            return True
+
+    return False
+
+
+def looks_like_person_name(name: str, company_name: str) -> bool:
+    value = str(name or "").strip()
+    if not value or len(value) > 24 or company_name in value:
+        return False
+    if any(term in value for term in EMPLOYEE_NAME_BLOCK_TERMS):
+        return False
+    return bool(re.search(r"[\u4e00-\u9fa5A-Za-z]", value))
+
+
+def is_valid_account_name(value: str) -> bool:
+    name = str(value or "").strip()
+    if not name or name in INVALID_ACCOUNT_NAMES or len(name) > 40:
+        return False
+    if any(term in name for term in DOUYIN_VERIFICATION_TERMS):
+        return False
+    if any(term in name for term in ("认证徽章", "已认证", "官方认证", "企业认证", "蓝V认证", "蓝V")):
+        return False
+    return bool(re.search(r"[\u4e00-\u9fa5A-Za-z]", name))
+
+
+def clean_douyin_account_text(value: Any) -> str:
+    text = re.sub(r"\s+", " ", str(value or "")).strip()
+    if not text:
+        return ""
+    text = re.sub(r"(认证徽章|已认证|官方认证|企业认证|蓝V认证|蓝V)", " ", text).strip()
+    split_patterns = [
+        r"\s*抖音号[:：].*$",
+        r"\s*Douyin ID[:：].*$",
+        r"\s*发过相关视频.*$",
+        r"\s*已关注.*$",
+        r"\s*已\s*$",
+        r"\s*关注\s*.*$",
+        r"\s*获赞.*$",
+        r"\s*\d+(?:\.\d+)?\s*(?:亿|万|w|W|千|k|K)?粉丝.*$",
+    ]
+    for pattern in split_patterns:
+        text = re.sub(pattern, "", text).strip()
+    return text.strip(" -_｜|:：")
+
+
+def normalize_account_name(platform_id: str, post: Dict, fallback_name: str) -> str:
+    if platform_id != "douyin":
+        return fallback_name
+
+    candidates = [
+        post.get("raw_bio") or post.get("bio") or "",
+        fallback_name,
+        post.get("content") or "",
+    ]
+    for candidate in candidates:
+        cleaned = clean_douyin_account_text(candidate)
+        if is_valid_account_name(cleaned):
+            return cleaned
+    return fallback_name if is_valid_account_name(fallback_name) else "未知"
+
+
+def derive_name_from_account(account_name: str, company_name: str) -> str:
+    text = clean_douyin_account_text(account_name)
+    if not text:
+        return ""
+
+    replacements = [
+        f"{company_name}科技",
+        f"{company_name}扫地机",
+        f"{company_name}洗地机",
+        f"{company_name}AURORA",
+        company_name,
+        "Dreame",
+        "dreame",
+    ]
+    nickname = text
+    for term in replacements:
+        nickname = nickname.replace(term, "")
+    nickname = nickname.strip(" -_｜|:：()（）")
+    if "在" + company_name in nickname:
+        nickname = nickname.split("在" + company_name, 1)[0].strip(" -_｜|:：")
+    if nickname.endswith("在"):
+        nickname = nickname[:-1].strip(" -_｜|:：")
+    if "-" in nickname:
+        nickname = nickname.split("-")[-1].strip(" -_｜|:：()（）")
+    if "，" in nickname:
+        nickname = nickname.split("，", 1)[0].strip()
+    if "," in nickname:
+        nickname = nickname.split(",", 1)[0].strip()
+    if "(" in nickname:
+        nickname = nickname.split("(", 1)[0].strip()
+    if "（" in nickname:
+        nickname = nickname.split("（", 1)[0].strip()
+    if looks_like_person_name(nickname, company_name):
+        return nickname
+    return ""
 
 
 def extract_profile_id(platform_id: str, post: Dict) -> str:
@@ -1414,6 +1847,10 @@ def extract_profile_id(platform_id: str, post: Dict) -> str:
 
 
 def extract_suspected_employee_name(account_name: str, texts: List[str], company_name: str) -> str:
+    direct_name = derive_name_from_account(account_name, company_name)
+    if direct_name:
+        return direct_name
+
     source_text = " ".join([account_name, *texts])
     cleaned_company = re.escape(company_name)
     patterns = [
@@ -1426,11 +1863,11 @@ def extract_suspected_employee_name(account_name: str, texts: List[str], company
         match = re.search(pattern, source_text)
         if match:
             name = match.group(1).strip()
-            if company_name not in name and len(name) <= 4:
+            if looks_like_person_name(name, company_name):
                 return name
 
     nickname = re.sub(company_name, "", account_name).strip(" -_｜|:：")
-    if 1 < len(nickname) <= 6 and re.search(r"[\u4e00-\u9fa5]", nickname):
+    if 1 < len(nickname) <= 6 and looks_like_person_name(nickname, company_name):
         return nickname
     return "疑似员工但未公开姓名"
 
@@ -1482,11 +1919,19 @@ def build_account_results(company_name: str, posts: List[Dict], limit: int) -> L
         platform_id = next((key for key, name in PLATFORM_NAMES.items() if name == platform_name), "")
         if platform_id not in ACCOUNT_PLATFORM_IDS:
             continue
+        if is_invalid_account_post(platform_id, post):
+            continue
 
-        account_name = str(post.get("author") or "未知").strip() or "未知"
+        raw_account_name = str(post.get("author") or "未知").strip() or "未知"
+        account_name = normalize_account_name(platform_id, post, raw_account_name)
         profile_url = str(post.get("profile_url") or post.get("profileUrl") or "").strip()
         user_id = extract_profile_id(platform_id, post)
-        fallback_id = user_id or profile_url or account_name
+        fallback_id = (
+            user_id or
+            profile_url or
+            str(post.get("url") or post.get("id") or "").strip() or
+            account_name
+        )
         key = f"{platform_id}:{fallback_id}"
         item = grouped.setdefault(key, {
             "platform": platform_id,
@@ -1513,7 +1958,7 @@ def build_account_results(company_name: str, posts: List[Dict], limit: int) -> L
         follower_count, follower_text = parse_count_text(post.get("followers") or post.get("followers_text") or "")
         if follower_count is not None and (item["followersCount"] is None or follower_count > item["followersCount"]):
             item["followersCount"] = follower_count
-            item["followersText"] = follower_text
+            item["followersText"] = str(follower_count)
 
         keyword = str(post.get("keyword") or "").strip()
         if keyword and keyword not in item["sourceKeywords"]:
@@ -1621,9 +2066,22 @@ def save_account_results(results: List[Dict], output_dir: str, company_name: str
             ws = wb.active
             ws.title = "accounts"
             ws.append(headers)
+            ws.freeze_panes = "A2"
+            ws.auto_filter.ref = f"A1:Q{len(results) + 1}"
+            widths = {
+                "A": 8, "B": 12, "C": 24, "D": 18, "E": 28, "F": 14, "G": 14,
+                "H": 10, "I": 14, "J": 40, "K": 46, "L": 16, "M": 20,
+                "N": 24, "O": 22, "P": 36, "Q": 28,
+            }
+            for col, width in widths.items():
+                ws.column_dimensions[col].width = width
             for item in results:
                 data = row(item)
-                ws.append([data.get(key, "") for key in headers])
+                values = [data.get(key, "") for key in headers]
+                for index, key in enumerate(headers):
+                    if key in {"rank", "followersCount", "followersText", "confidenceScore", "matchedPostCount"} and re.fullmatch(r"-?\d+", str(values[index])):
+                        values[index] = int(values[index])
+                ws.append(values)
             wb.save(f"{file_base}.xlsx")
             return
         except Exception:

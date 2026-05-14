@@ -3,8 +3,9 @@ import fs from 'fs';
 import path from 'path';
 import https from 'https';
 import logger from 'electron-log';
-import { AccountIdentificationConfig, AccountIdentificationPayload, BridgeMessage, CrawlerConfig, ExportPayload } from '../shared/types';
+import { AccountIdentificationConfig, AccountIdentificationPayload, BridgeMessage, CrawlerConfig, ExportPayload, PlatformId } from '../shared/types';
 import { saveCookies, loadCookies } from './services/cookies';
+import { autoFetchCookie } from './services/autoCookie';
 import { checkCrawlerEnv } from './services/crawlerEnv';
 import { CrawlerRuntime } from './services/crawlerRuntime';
 import { exportAccountIdentificationData, exportCrawledData } from './services/exporter';
@@ -216,6 +217,7 @@ ipcMain.handle('export-account-identification-data', async (_event, payload: Acc
 
 ipcMain.handle('save-cookies', async (_event, cookies: Record<string, string>) => saveCookies(cookies));
 ipcMain.handle('load-cookies', async () => loadCookies());
+ipcMain.handle('auto-fetch-cookie', async (_event, platform: PlatformId) => autoFetchCookie(platform, mainWindow));
 
 ipcMain.handle('get-settings', async () => loadSettings());
 ipcMain.handle('set-settings', async (_event, partial) => saveSettings(partial));
