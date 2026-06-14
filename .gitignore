@@ -3,6 +3,7 @@ node_modules/
 .chitu_data/
 .claude/settings.local.json
 AGENTS.md
+remotion-chart/
 
 dist/
 dist_crawler/
