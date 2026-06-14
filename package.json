@@ -1,6 +1,6 @@
 {
   "name": "chitu",
-  "version": "0.0.31",
+  "version": "0.0.32",
   "description": "赤兔数据采集系统 beta 版",
   "main": "dist/main/main.js",
   "scripts": {
